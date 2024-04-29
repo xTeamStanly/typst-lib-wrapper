@@ -1,0 +1,21 @@
+[package]
+name = "typst-lib-wrapper"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[features]
+default = ["sync"]
+# uses sync parking lock mutex
+sync = ["dep:parking_lot"]
+# uses async tokio (mutex & fs) and async request for downloading packages (tokio's blocking task)
+async = ["dep:tokio"]
+
+[dependencies]
+comemo = "0.4.0"
+fontdb ={ version = "0.16.2", features = ["std", "fs", "fontconfig"] }
+parking_lot = { version = "0.12.2", optional = true }
+thiserror = "1.0.59"
+tokio = { version = "1.37.0", features = ["sync", "fs"], optional = true }
+typst = "0.11.0"
