@@ -1,14 +1,31 @@
-// pub static FONT_CACHE
+use std::{path::PathBuf, sync::OnceLock};
 
-use std::borrow::BorrowMut;
-use std::fs;
-use std::io::{BufRead, BufReader, Read};
-use std::path::PathBuf;
-use std::{path, sync::OnceLock};
+use typst::text::Font;
+use typst::foundations::Bytes;
+
+#[derive(Debug, Clone)]
+pub(crate) struct LazyFont {
+    path: PathBuf,
+    index: u32,
+    font: OnceLock<Option<Font>>,
+    embedded: bool
+}
+
+impl LazyFont {
+    pub fn get(&self) -> Option<Font> {
+        let font = self.font.get_or_init(|| {
+            let raw_font: Vec<u8> = std::fs::read(&self.path).ok()?;
+            let bytes: Bytes = Bytes::from(raw_font);
+            Font::new(bytes, self.index)
+        });
+        return font.clone();
+    }
+}
+
 
 use fontdb::{Database, Source as FontSource};
-use typst::text::{Font, FontBook, FontInfo};
-use typst::foundations::{Bytes as TypstBytes};
+use typst::text::{FontBook, FontInfo};
+
 
 use parking_lot::{Mutex, const_mutex};
 
@@ -16,34 +33,46 @@ use crate::errors::{WrapperError, WrapperResult};
 
 /// Global font cache, initialized once on demand. \
 /// Many threads could access this cache so it's behind a [Mutex](parking_lot::Mutex).
-pub static FONT_CACHE: Mutex<Option<FontCache>> = const_mutex(None);
-
+static FONT_CACHE: Mutex<Option<FontCache>> = const_mutex(None);
 
 /// Holds details about the location (path) of a font and lazily the font itself.
 ///
 /// Docs: [FontSlot](https://docs.rs/crate/typst-cli/0.11.0/source/src/fonts.rs)
-#[derive(Debug)]
-struct LazyFont {
-    /// The path at which the font can be found on the system.
-    path: PathBuf,
-    /// The index of the font in its collection. Zero if the path does not point
-    /// to a collection.
-    index: u32,
-    /// The lazily loaded font.
-    font: OnceLock<Option<Font>>,
-}
+// #[derive(Debug, Clone)]
+// pub(crate) struct LazyFont {
+//     /// The path at which the font can be found on the system.
+//     path: PathBuf,
+//     /// The index of the font in its collection. Zero if the path does not point
+//     /// to a collection.
+//     index: u32,
+//     /// The lazily loaded font.
+//     pub font: OnceLock<Option<Font>>,
 
-impl LazyFont {
-    /// Get the font for this slot.
-    pub fn get(&self) -> Option<Font> {
-        self.font
-            .get_or_init(|| {
-                let data = TypstBytes::from(fs::read(&self.path).ok()?);
-                Font::new(data, self.index)
-            })
-            .clone()
-    }
-}
+//     pub embeded: bool
+// }
+// impl LazyFont {
+//     /// Get the font for this slot.
+//     pub fn get(&self) -> Option<Font> {
+
+//         // let mut first_time = false;
+
+//         let retval = self.font
+//             .get_or_init(|| {
+//                 let data = TypstBytes::from(fs::read(&self.path).ok()?);
+//                 // println!("\x1b[1;31m MISS: {} \x1b[0m", self.path.to_str().unwrap());
+//                 // first_time = true;
+//                 Font::new(data, self.index)
+//             })
+//             .clone();
+
+//         // if (!first_time) {
+//         //     println!("\x1b[1;32m HIT: {} \x1b[0m", self.path.to_str().unwrap());
+//         // }
+
+
+//         return retval;
+//     }
+// }
 
 /// Caches and searches for fonts.
 ///
@@ -51,7 +80,8 @@ impl LazyFont {
 /// Overtime the cache accumulates allocated font bytes. This can happen \
 /// when keep loading more and more fonts. One way to deal with this is to \
 /// periodically reconstruct this struct so it releases memory. \
-/// This is an extreme case and **probably** shouldn't be that big of a deal.
+/// This is an extreme case and **probably** shouldn't be that big of a deal \
+/// if you are using a normal amount of fonts.
 ///
 /// Docs: [FontSearcher](https://docs.rs/crate/typst-cli/0.11.0/source/src/fonts.rs)
 #[derive(Debug)]
@@ -64,16 +94,54 @@ pub struct FontCache {
 
 impl FontCache {
 
-    /// [FontCache]'s [FontBook] getter.
-    #[inline]
-    pub fn book(&self) -> &FontBook {
-        &self.book
+    pub fn empty_cache() -> WrapperResult<()> {
+        let mut font_cache_mutex = FONT_CACHE.lock();
+        let font_cache: &mut FontCache = Self::get_mut_or_init(&mut font_cache_mutex)?;
+
+        for lazyfont in font_cache.fonts.iter_mut() {
+            drop(lazyfont.font.take());
+        }
+
+        return Ok(());
     }
 
-    /// [FontCache]'s [LazyFont] slice getter.
-    #[inline]
-    pub fn fonts(&self) -> &[LazyFont] {
-        &self.fonts
+    pub fn update_cache(font: Font) -> WrapperResult<()> {
+        let mut font_cache_mutex = FONT_CACHE.lock();
+        let font_cache: &mut FontCache = Self::get_mut_or_init(&mut font_cache_mutex)?;
+
+        let info = font.info();
+        // println!("\x1b[1;35m CACHED REQ: {:?} \x1b[0m", font.info());
+        if let Some(buffer_index) = font_cache.book.select(&info.family.to_lowercase(), info.variant) {
+            if let Some(old_font) = font_cache.fonts.get_mut(buffer_index) {
+                let old_font_optional = old_font.font.take();
+                match old_font_optional {
+                    None => {
+                        // println!("\x1b[1;33m CACHED: {:?} \x1b[0m", font.info());
+                        old_font.font.set(Some(font)).unwrap();
+                    },
+                    Some(fff) => {
+                        old_font.font.set(fff).unwrap();
+                        // println!("\x1b[1;36m ALREADY CACHED: {:?} \x1b[0m", font.info());
+                    }
+                };
+                // println!("\x1b[1;33m CACHED: {:?} \x1b[0m", font.info());
+                // old_font.font.set(Some(font));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Acquires [global font cache](FONT_CACHE), **clones** [FontBook] and creates
+    /// [LazyFont] [Vec] by **cloning** and returns them as tuple.
+    pub fn get_book_and_fonts() -> WrapperResult<(FontBook, Vec<LazyFont>)> {
+        let mut font_cache_mutex = FONT_CACHE.lock();
+        let font_cache: &mut FontCache = Self::get_mut_or_init(&mut font_cache_mutex)?;
+
+        let book: FontBook = font_cache.book.clone();
+        let fonts: Vec<LazyFont> = font_cache.fonts.iter().cloned().collect();
+
+        return Ok((book, fonts));
     }
 
     /// [Global font cache](FONT_CACHE) **must be locked** before calling this function.
@@ -108,12 +176,13 @@ impl FontCache {
                 font_cache.fonts.push(LazyFont {
                     path: path.clone(),
                     index: face.index,
-                    font: OnceLock::new()
+                    font: OnceLock::new(),
+                    embedded: false
                 });
             }
         }
 
-        dbg!(font_cache);
+        // dbg!(font_cache);
 
         Ok(())
     }
@@ -228,10 +297,60 @@ impl FontCache {
                 fonts.push(LazyFont {
                     path: path.clone(),
                     index: face.index,
-                    font: OnceLock::new()
+                    font: OnceLock::new(),
+                    embedded: false
                 });
             }
         }
+
+        #[cfg(feature = "embed_typst_fonts")]
+        for data in typst_assets::fonts() {
+            let buffer = typst::foundations::Bytes::from_static(data);
+            for (i, font) in Font::iter(buffer).enumerate() {
+                book.push(font.info().clone());
+                fonts.push(LazyFont {
+                    path: PathBuf::new(),
+                    index: i as u32,
+                    font: OnceLock::from(Some(font)),
+                    embedded: true
+                })
+            }
+        }
+
+        // dbg!(&book);
+
+
+
+        // println!("------------------------------------");
+        // for (family_name, family_fonts) in book.families() {
+        //     // println!("{family_name}");
+        //     for index in book.select_family(family_name.to_lowercase().as_str()) {
+        //         println!("{family_name}: {index}");
+        //     }
+        //     // for index in book.select_family(family_name) {
+        //     //     println!("{family_name}: {index}");
+        //     // }
+
+        //     // for font_info in family_fonts {
+
+        //     // }
+        // }
+        // println!("------------------------------------");
+        // println!("");
+        // println!("");
+        // println!("");
+
+        // for (family_name, family_fonts) in book.families() {
+        //     for font in family_fonts {
+
+        //     }
+        // }
+
+        // dbg!(&book);
+        // println!("");
+        // println!("");
+        // println!("");
+        // dbg!(&fonts);
 
         return Ok(Self { book, fonts });
     }
