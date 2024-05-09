@@ -1,18 +1,21 @@
-
-
-
-use std::{collections::HashMap, path::PathBuf};
+use std::collections::HashMap;
+use std::path::PathBuf;
 
 use chrono::Datelike;
 use comemo::Prehashed;
 use parking_lot::Mutex;
-use typst::{diag::FileResult, eval::Tracer, foundations::{Bytes, Datetime}, text::{Font, FontBook}, Library, World};
+
+use typst::{Library, World};
+use typst::diag::FileResult;
+use typst::eval::Tracer;
+use typst::foundations::{Bytes, Datetime};
+use typst::text::{Font, FontBook};
 use typst_syntax::{FileId, Source};
-use ureq::Agent;
 
-use crate::shared::{create_http_agent, CompilerOptionsBuilder, Format};
+use crate::shared::{CompilerOptionsBuilder, Format};
 
-use super::{file::LazyFile, font::LazyFont};
+use super::file::LazyFile;
+use super::font::LazyFont;
 
 #[derive(Debug)]
 pub struct CompilerOptions {
@@ -91,6 +94,7 @@ impl CompilerOptions {
 
         let bytes = typst_pdf::pdf(&document, typst::foundations::Smart::Auto, None);
 
+        #[cfg(debug_assertions)]
         dbg!(tracer.warnings());
 
         std::fs::write(path, bytes).unwrap();

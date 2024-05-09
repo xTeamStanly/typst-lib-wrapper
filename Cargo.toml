@@ -26,9 +26,12 @@ embed_typst_fonts = []
 [dependencies]
 chrono = "0.4.38"
 comemo = "0.4.0"
+dirs = "5.0.1"
+flate2 = "1.0.30"
 fontdb = { version = "0.16.2", features = ["std", "fs", "fontconfig"] }
 native-tls = "0.2.11"
 parking_lot = { version = "0.12.2", optional = true }
+tar = "0.4.40"
 thiserror = "1.0.59"
 tokio = { version = "1.37.0", features = ["sync", "fs"], optional = true }
 typst = "0.11.0"

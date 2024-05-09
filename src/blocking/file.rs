@@ -1,7 +1,9 @@
 use std::path::{Path, PathBuf};
 
-use typst::{diag::{FileError, FileResult}, foundations::Bytes};
+use typst::{diag::{FileError, FileResult, PackageError}, foundations::Bytes};
 use typst_syntax::{FileId, Source};
+
+use crate::{errors::{WrapperError, WrapperResult}, shared::prepare_package};
 
 /// Same as [SlotCell](https://docs.rs/crate/typst-cli/latest/source/src/world.rs)
 /// from [typst-cli](https://github.com/typst/typst/tree/main/crates/typst-cli).
@@ -93,29 +95,25 @@ impl LazyFile {
     fn read_from_disk(path: &Path) -> FileResult<Vec<u8>> {
         let f = |e| FileError::from_io(e, path);
         if std::fs::metadata(path).map_err(f)?.is_dir() {
-            Err(FileError::IsDirectory)
+            Err(FileError::IsDirectory)?
         } else {
             std::fs::read(path).map_err(f)
         }
     }
 
-    /// Resolves the path of a file id on the system, downloading a package if
-    /// necessary.
-    fn system_path(project_root: &Path, id: FileId, http_client: &ureq::Agent) -> FileResult<PathBuf> {
-        // Determine the root path relative to which the file path
-        // will be resolved.
-        // let buf;
-        let mut root = project_root;
+    /// Resolves the path of a file id on the system, downloading a package if necessary. \
+    /// Determine the root path relative to which the file path will be resolved.
+    fn system_path(
+        project_root: &Path,
+        id: FileId,
+        http_client: &ureq::Agent
+    ) -> FileResult<PathBuf> {
         if let Some(spec) = id.package() {
-            todo!("IMPLMENT THIS LATER");
-            // TODO IMPLEMENT PACKAGE DOWNLOADING
-            // buf = crate::package::prepare_package(spec)?;
-            // root = &buf;
+            let package_path: PathBuf = prepare_package(spec, http_client)?;
+            return id.vpath().resolve(&package_path).ok_or(FileError::AccessDenied);
         }
 
-        // Join the path to the root. If it tries to escape, deny
-        // access. Note: It can still escape via symlinks.
-        id.vpath().resolve(root).ok_or(FileError::AccessDenied)
+        return id.vpath().resolve(project_root).ok_or(FileError::AccessDenied);
     }
 
     /// Decode UTF-8 with an optional BOM.
@@ -146,7 +144,11 @@ impl LazyFile {
     }
 
     /// Retrieve the source for this file. Will download packages if necessary.
-    pub(crate) fn source(&mut self, project_root: &Path, http_client: &ureq::Agent) -> FileResult<Source> {
+    pub(crate) fn source(
+        &mut self,
+        project_root: &Path,
+        http_client: &ureq::Agent
+    ) -> FileResult<Source> {
         self.source.get_or_init(
             || {
                 let path = Self::system_path(project_root, self.id, http_client)?;
@@ -166,7 +168,11 @@ impl LazyFile {
     }
 
     /// Retrieve the file's bytes. Will download packages if necessary.
-    pub(crate) fn file(&mut self, project_root: &Path, http_client: &ureq::Agent) -> FileResult<Bytes> {
+    pub(crate) fn file(
+        &mut self,
+        project_root: &Path,
+        http_client: &ureq::Agent
+    ) -> FileResult<Bytes> {
         self.file.get_or_init(
             || {
                 let path = Self::system_path(project_root, self.id, http_client)?;

@@ -181,7 +181,7 @@ impl CompilerOptionsBuilder {
     }
 
     pub fn build_sync(self) -> WrapperResult<CompilerOptionsSync> {
-        let http_client = create_http_agent(self.certificate).map_err(WrapperError::from)?;
+        let http_client = create_http_agent(self.certificate)?;
 
         let now = chrono::Utc::now();
         let format: Format = self.format.unwrap_or_default();
