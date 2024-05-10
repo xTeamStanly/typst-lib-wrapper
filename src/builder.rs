@@ -8,6 +8,7 @@ use parking_lot::Mutex;
 use typst::foundations::{Capturer, IntoValue};
 use typst::foundations::{Dict, Value};
 use typst::text::FontBook;
+use typst::visualize::Color;
 use typst::{Library, LibraryBuilder};
 use typst_syntax::{FileId, Source, VirtualPath};
 
@@ -22,15 +23,15 @@ use crate::parameters::{Format, Input};
 
 #[derive(Clone)]
 pub struct CompilerBuilder {
-    pub(crate) input: Input,
-    pub(crate) format: Option<Format>,
+    input: Input,
+    format: Option<Format>,
 
-    pub(crate) sys_inputs: Vec<(String, String)>,
-    pub(crate) custom_data: Vec<(String, Value)>,
+    sys_inputs: Vec<(String, String)>,
+    custom_data: Vec<(String, Value)>,
 
-    pub(crate) font_paths: Vec<PathBuf>,
-    pub(crate) ppi: Option<f32>,
-
+    font_paths: Vec<PathBuf>,
+    ppi: Option<f32>,
+    background: Option<Color>,
     /// Optional X509 [certificate](Certificate).
     /// # Example
     ///
@@ -41,7 +42,7 @@ pub struct CompilerBuilder {
     /// // Creates HTTP agent.
     /// let agent = create_http_agent(Some(certificate)).expect("Coudn't create HTTP Agent");
     /// ```
-    pub(crate) certificate: Option<Certificate>,
+    certificate: Option<Certificate>,
 }
 /// Custom [Debug] implementation, because [Certificate] doesn't implement [Debug].
 impl Debug for CompilerBuilder {
@@ -58,6 +59,7 @@ impl Debug for CompilerBuilder {
             .field("custom_data", &self.custom_data)
             .field("font_paths", &self.font_paths)
             .field("ppi", &self.ppi)
+            .field("background", &self.background)
             .field("certificate", &certificate_fmt)
             .finish()
     }
@@ -74,6 +76,7 @@ impl CompilerBuilder {
 
             font_paths: Vec::new(),
             ppi: None,
+            background: None,
             certificate: None,
         }
     }
@@ -136,6 +139,11 @@ impl CompilerBuilder {
         self
     }
 
+    pub fn with_background(mut self, color: Color) -> Self {
+        self.background = Some(color);
+        self
+    }
+
     pub fn with_certificate(mut self, certificate: Certificate) -> Self {
         self.certificate = Some(certificate);
         self
@@ -147,6 +155,7 @@ impl CompilerBuilder {
         let now = chrono::Utc::now();
         let format: Format = self.format.unwrap_or_default();
         let ppi: f32 = self.ppi.unwrap_or(144.0); // default typst ppi: 144.0
+        let background = self.background.unwrap_or(Color::WHITE);
         let mut files: HashMap<FileId, LazyFile> = HashMap::new();
 
         // Convert the input pairs to a dictionary.
@@ -227,6 +236,7 @@ impl CompilerBuilder {
 
             format,
             ppi,
+            background,
             now,
         })
     }

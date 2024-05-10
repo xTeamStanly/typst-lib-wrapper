@@ -18,14 +18,17 @@ embed_typst_fonts = []
 chrono = "0.4.38"
 comemo = "0.4.0"
 dirs = "5.0.1"
+ecow = "0.2"
 flate2 = "1.0.30"
 fontdb = { version = "0.16.2", features = ["std", "fs", "fontconfig"] }
 native-tls = "0.2.11"
 parking_lot = { version = "0.12.2" }
+rayon = "1.10.0"
 tar = "0.4.40"
 thiserror = "1.0.59"
 typst = "0.11.0"
 typst-assets = { version = "0.11.0", features = ["fonts"] }
 typst-pdf = "0.11.0"
+typst-render = "0.11.0"
 typst-syntax = "0.11.0"
 ureq = { version = "2.9.7", features = ["native-tls"] }

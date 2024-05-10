@@ -1,15 +1,27 @@
 use std::path::PathBuf;
 use std::sync::OnceLock;
 
-use typst::text::Font;
+use fontdb::{Database, Source as FontSource};
+use parking_lot::{const_mutex, Mutex};
 use typst::foundations::Bytes;
+use typst::text::{Font, FontBook, FontInfo};
+
+use crate::errors::{WrapperError, WrapperResult};
+
+
+
+
+
+
+
+
 
 #[derive(Debug, Clone)]
 pub(crate) struct LazyFont {
     path: PathBuf,
     index: u32,
     font: OnceLock<Option<Font>>,
-    embedded: bool
+    embedded: bool,
 }
 
 impl LazyFont {
@@ -22,15 +34,6 @@ impl LazyFont {
         return font.clone();
     }
 }
-
-
-use fontdb::{Database, Source as FontSource};
-use typst::text::{FontBook, FontInfo};
-
-
-use parking_lot::{Mutex, const_mutex};
-
-use crate::errors::{WrapperError, WrapperResult};
 
 /// Global font cache, initialized once on demand. \
 /// Many threads could access this cache so it's behind a [Mutex](parking_lot::Mutex).
@@ -70,7 +73,6 @@ static FONT_CACHE: Mutex<Option<FontCache>> = const_mutex(None);
 //         //     println!("\x1b[1;32m HIT: {} \x1b[0m", self.path.to_str().unwrap());
 //         // }
 
-
 //         return retval;
 //     }
 // }
@@ -94,7 +96,6 @@ pub struct FontCache {
 }
 
 impl FontCache {
-
     pub fn empty_cache() -> WrapperResult<()> {
         let mut font_cache_mutex = FONT_CACHE.lock();
         let font_cache: &mut FontCache = Self::get_mut_or_init(&mut font_cache_mutex)?;
@@ -112,14 +113,17 @@ impl FontCache {
 
         let info = font.info();
         // println!("\x1b[1;35m CACHED REQ: {:?} \x1b[0m", font.info());
-        if let Some(buffer_index) = font_cache.book.select(&info.family.to_lowercase(), info.variant) {
+        if let Some(buffer_index) = font_cache
+            .book
+            .select(&info.family.to_lowercase(), info.variant)
+        {
             if let Some(old_font) = font_cache.fonts.get_mut(buffer_index) {
                 let old_font_optional = old_font.font.take();
                 match old_font_optional {
                     None => {
                         // println!("\x1b[1;33m CACHED: {:?} \x1b[0m", font.info());
                         old_font.font.set(Some(font)).unwrap();
-                    },
+                    }
                     Some(fff) => {
                         old_font.font.set(fff).unwrap();
                         // println!("\x1b[1;36m ALREADY CACHED: {:?} \x1b[0m", font.info());
@@ -135,12 +139,12 @@ impl FontCache {
 
     /// Acquires [global font cache](FONT_CACHE), **clones** [FontBook] and creates
     /// [LazyFont] [Vec] by **cloning** and returns them as tuple.
-    pub fn get_book_and_fonts() -> WrapperResult<(FontBook, Vec<LazyFont>)> {
+    pub(crate) fn get_book_and_fonts() -> WrapperResult<(FontBook, Vec<LazyFont>)> {
         let mut font_cache_mutex = FONT_CACHE.lock();
         let font_cache: &mut FontCache = Self::get_mut_or_init(&mut font_cache_mutex)?;
 
         let book: FontBook = font_cache.book.clone();
-        let fonts: Vec<LazyFont> = font_cache.fonts.iter().cloned().collect();
+        let fonts: Vec<LazyFont> = font_cache.fonts.to_vec();
 
         return Ok((book, fonts));
     }
@@ -154,7 +158,7 @@ impl FontCache {
 
         match font_cache {
             Some(fc) => Ok(fc),
-            None => Err(WrapperError::UninitializedFontCache) // Shouldn't happen, just in case
+            None => Err(WrapperError::UninitializedFontCache), // Shouldn't happen, just in case
         }
     }
 
@@ -165,7 +169,7 @@ impl FontCache {
         for face in database.faces() {
             let path = match &face.source {
                 FontSource::File(path) | FontSource::SharedFile(path, _) => path,
-                FontSource::Binary(_) => continue // typst-cli doesn't add binary sources to the database
+                FontSource::Binary(_) => continue, // typst-cli doesn't add binary sources to the database
             };
 
             let info: Option<FontInfo> = database
@@ -178,7 +182,7 @@ impl FontCache {
                     path: path.clone(),
                     index: face.index,
                     font: OnceLock::new(),
-                    embedded: false
+                    embedded: false,
                 });
             }
         }
@@ -198,7 +202,8 @@ impl FontCache {
         let font_cache: &mut FontCache = Self::get_mut_or_init(&mut font_cache_mutex)?;
 
         let mut db = Database::new();
-        db.load_font_file(font_path).map_err(WrapperError::FontLoadingError)?;
+        db.load_font_file(font_path)
+            .map_err(WrapperError::FontLoadingError)?;
 
         return Self::insert_from_database(font_cache, db);
     }
@@ -216,7 +221,8 @@ impl FontCache {
 
         let mut db = Database::new();
         for font_path in font_paths {
-            db.load_font_file(font_path).map_err(WrapperError::FontLoadingError)?;
+            db.load_font_file(font_path)
+                .map_err(WrapperError::FontLoadingError)?;
         }
 
         return Self::insert_from_database(font_cache, db);
@@ -267,7 +273,10 @@ impl FontCache {
     /// `include_system_fonts` - Notes if all system fonts should be loaded.
     /// `dir_paths` - Optional slice of paths to directories containing fonts.
     #[inline]
-    fn init_inner(include_system_fonts: bool, dir_paths: Option<&[PathBuf]>) -> WrapperResult<Self> {
+    fn init_inner(
+        include_system_fonts: bool,
+        dir_paths: Option<&[PathBuf]>,
+    ) -> WrapperResult<Self> {
         let mut db = Database::new();
 
         if include_system_fonts {
@@ -286,7 +295,7 @@ impl FontCache {
         for face in db.faces() {
             let path = match &face.source {
                 FontSource::File(path) | FontSource::SharedFile(path, _) => path,
-                FontSource::Binary(_) => continue // typst-cli doesn't add binary sources to the database
+                FontSource::Binary(_) => continue, // typst-cli doesn't add binary sources to the database
             };
 
             let info: Option<FontInfo> = db
@@ -299,7 +308,7 @@ impl FontCache {
                     path: path.clone(),
                     index: face.index,
                     font: OnceLock::new(),
-                    embedded: false
+                    embedded: false,
                 });
             }
         }
@@ -313,14 +322,12 @@ impl FontCache {
                     path: PathBuf::new(),
                     index: i as u32,
                     font: OnceLock::from(Some(font)),
-                    embedded: true
+                    embedded: true,
                 })
             }
         }
 
         // dbg!(&book);
-
-
 
         // println!("------------------------------------");
         // for (family_name, family_fonts) in book.families() {
@@ -362,7 +369,6 @@ impl FontCache {
         Self::init_inner(true, None)
     }
 
-
     /// Loads all operating system fonts, custom fonts and initializes
     /// [global font cache](FONT_CACHE). This will initialize the \
     /// font cache with provided fonts which are lazily loaded on demand.
@@ -379,7 +385,6 @@ impl FontCache {
 
         let font_cache: FontCache = Self::init_inner(include_system_fonts, dir_paths)?;
         *font_cache_mutex = Some(font_cache);
-
 
         return Ok(());
     }

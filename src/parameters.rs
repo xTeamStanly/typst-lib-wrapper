@@ -3,6 +3,9 @@
 
 use std::path::PathBuf;
 
+use ecow::EcoVec;
+use typst::{diag::SourceDiagnostic, model::Document};
+
 /// Typst input content/file. \
 ///
 /// ## Content
@@ -69,11 +72,12 @@ impl From<(String, PathBuf)> for Input {
 
 
 
-
-
-
-
-
+#[derive(Debug)]
+pub struct CompilerOutput<T> {
+    pub output: Option<T>,
+    pub warnings: EcoVec<SourceDiagnostic>,
+    pub errors: EcoVec<SourceDiagnostic>
+}
 
 
 
