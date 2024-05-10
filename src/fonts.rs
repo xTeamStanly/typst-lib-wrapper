@@ -1,4 +1,5 @@
-use std::{path::PathBuf, sync::OnceLock};
+use std::path::PathBuf;
+use std::sync::OnceLock;
 
 use typst::text::Font;
 use typst::foundations::Bytes;
@@ -12,7 +13,7 @@ pub(crate) struct LazyFont {
 }
 
 impl LazyFont {
-    pub fn get(&self) -> Option<Font> {
+    pub(crate) fn get(&self) -> Option<Font> {
         let font = self.font.get_or_init(|| {
             let raw_font: Vec<u8> = std::fs::read(&self.path).ok()?;
             let bytes: Bytes = Bytes::from(raw_font);

@@ -5,23 +5,14 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[profile.release]
-debug = true
-
 [features]
-# default = ["sync", "embed_typst_fonts"]
-default = ["sync", "embed_typst_fonts"]
-# uses sync parking lock mutex
-sync = ["dep:parking_lot"]
-# uses async tokio (mutex & fs) and async request for downloading packages (tokio's blocking task)
-async = ["dep:tokio"]
-# embeds default typst fonts
+default = ["embed_typst_fonts"]
+# Automatically loads default typst fonts into [FontCache].
 # https://github.com/typst/typst-assets
 # - For text: Linux Libertine, New Computer Modern
 # - For math: New Computer Modern Math
 # - For code: Deja Vu Sans Mono
 embed_typst_fonts = []
-
 
 [dependencies]
 chrono = "0.4.38"
@@ -30,10 +21,9 @@ dirs = "5.0.1"
 flate2 = "1.0.30"
 fontdb = { version = "0.16.2", features = ["std", "fs", "fontconfig"] }
 native-tls = "0.2.11"
-parking_lot = { version = "0.12.2", optional = true }
+parking_lot = { version = "0.12.2" }
 tar = "0.4.40"
 thiserror = "1.0.59"
-tokio = { version = "1.37.0", features = ["sync", "fs"], optional = true }
 typst = "0.11.0"
 typst-assets = { version = "0.11.0", features = ["fonts"] }
 typst-pdf = "0.11.0"

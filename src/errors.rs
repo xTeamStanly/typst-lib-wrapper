@@ -3,6 +3,8 @@ use std::path::PathBuf;
 use thiserror::Error;
 pub use typst::diag::{FileError, PackageError}; // Re-exported typst errors.
 
+pub type WrapperResult<T> = Result<T, WrapperError>;
+
 #[derive(Debug, Error)]
 #[error("{0}")]
 pub enum WrapperError {
@@ -63,5 +65,3 @@ impl From<PackageError> for WrapperError {
         Self::Package(value)
     }
 }
-
-pub type WrapperResult<T> = Result<T, WrapperError>;

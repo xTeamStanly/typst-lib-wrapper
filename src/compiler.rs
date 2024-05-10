@@ -5,20 +5,19 @@ use chrono::Datelike;
 use comemo::Prehashed;
 use parking_lot::Mutex;
 
-use typst::{Library, World};
 use typst::diag::FileResult;
 use typst::eval::Tracer;
 use typst::foundations::{Bytes, Datetime};
 use typst::text::{Font, FontBook};
+use typst::{Library, World};
 use typst_syntax::{FileId, Source};
 
-use crate::shared::{CompilerOptionsBuilder, Format};
-
-use super::file::LazyFile;
-use super::font::LazyFont;
+use crate::files::LazyFile;
+use crate::fonts::LazyFont;
+use crate::parameters::Format;
 
 #[derive(Debug)]
-pub struct CompilerOptions {
+pub struct Compiler {
     pub(crate) root: PathBuf,
     pub(crate) entry: Source,
     pub(crate) files: Mutex<HashMap<FileId, LazyFile>>,
@@ -31,16 +30,16 @@ pub struct CompilerOptions {
 
     pub(crate) format: Format,
     pub(crate) ppi: f32,
-    pub(crate) now: chrono::DateTime<chrono::Utc>
+    pub(crate) now: chrono::DateTime<chrono::Utc>,
 }
 
 // todo: https://docs.rs/crate/typst-cli/latest/source/src/world.rs
-impl World for CompilerOptions {
-    fn library(&self) ->  &Prehashed<Library> {
+impl World for Compiler {
+    fn library(&self) -> &Prehashed<Library> {
         &self.library
     }
 
-    fn book(&self) ->  &Prehashed<FontBook> {
+    fn book(&self) -> &Prehashed<FontBook> {
         &self.book
     }
 
@@ -61,13 +60,13 @@ impl World for CompilerOptions {
     }
 
     fn today(&self, offset: Option<i64>) -> Option<Datetime> {
-
         // The time with the specified UTC offset, or within the local time zone.
         let with_offset = match offset {
             None => self.now.with_timezone(&chrono::Local).fixed_offset(),
             Some(hours) => {
                 let seconds = i32::try_from(hours).ok()?.checked_mul(3600)?;
-                self.now.with_timezone(&chrono::FixedOffset::east_opt(seconds)?)
+                self.now
+                    .with_timezone(&chrono::FixedOffset::east_opt(seconds)?)
             }
         };
 
@@ -79,14 +78,15 @@ impl World for CompilerOptions {
     }
 }
 
-impl CompilerOptions {
+impl Compiler {
     /// Access the canonical slot for the given file id.
     fn slot<F, T>(&self, id: FileId, f: F) -> T
-    where F: FnOnce(&mut LazyFile) -> T {
+    where
+        F: FnOnce(&mut LazyFile) -> T,
+    {
         let mut map = self.files.lock();
         f(map.entry(id).or_insert_with(|| LazyFile::new(id)))
     }
-
 
     pub fn save_pdf(&self, path: PathBuf) {
         let mut tracer = Tracer::new();
@@ -100,23 +100,6 @@ impl CompilerOptions {
         std::fs::write(path, bytes).unwrap();
     }
 
-    fn compile_document(&self) {
-
-    }
-    pub fn compile(&self) {
-
-    }
-}
-
-impl TryFrom<CompilerOptionsBuilder> for CompilerOptions {
-    type Error = ();
-
-    fn try_from(value: CompilerOptionsBuilder) -> Result<Self, Self::Error> {
-        let now = chrono::Utc::now();
-
-
-        // create_agent(value.certificate).unwrap();
-
-        todo!()
-    }
+    fn compile_document(&self) {}
+    pub fn compile(&self) {}
 }

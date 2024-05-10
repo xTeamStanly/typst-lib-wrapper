@@ -1,24 +1,18 @@
 #![allow(clippy::needless_return)]
 
+mod builder;
+mod compiler;
+mod errors;
+mod files;
+mod fonts;
+mod package; // DONE
+mod parameters;
 
-mod asynchronous;
+// Re-exports
+pub use native_tls::Certificate;
 
-
-// mod compiler_options;
-// mod system_font_cache;
-
-pub mod errors;
-
-pub mod shared;
-
-pub mod blocking;
-
-// #[cfg(feature = "async")]
-// mod async_impl;
-
-// #[cfg(feature = "sync")]
-// mod sync_impl;
-
-pub fn add(left: usize, right: usize) -> usize {
-    left + right
-}
+pub use builder::CompilerBuilder;
+pub use compiler::Compiler;
+pub use errors::WrapperError as Error;
+pub use fonts::FontCache;
+pub use parameters::{Input, Format, Output};

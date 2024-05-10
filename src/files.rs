@@ -1,9 +1,11 @@
 use std::path::{Path, PathBuf};
 
-use typst::{diag::{FileError, FileResult, PackageError}, foundations::Bytes};
+use typst::diag::{FileError, FileResult};
+use typst::foundations::Bytes;
 use typst_syntax::{FileId, Source};
 
-use crate::{errors::{WrapperError, WrapperResult}, shared::prepare_package};
+use crate::package::prepare_package;
+
 
 /// Same as [SlotCell](https://docs.rs/crate/typst-cli/latest/source/src/world.rs)
 /// from [typst-cli](https://github.com/typst/typst/tree/main/crates/typst-cli).
@@ -27,17 +29,6 @@ impl<T: Clone> LazyCell<T> {
             fingerprint: 0,
             accessed: false
         }
-    }
-
-    /// Whether the cell was accessed in the ongoing compilation.
-    fn accessed(&self) -> bool {
-        self.accessed
-    }
-
-    /// Marks the cell as not yet accessed in preparation of the next
-    /// compilation.
-    fn reset(&mut self) {
-        self.accessed = false;
     }
 
     /// Gets the contents of the cell or initialize them.
@@ -129,18 +120,6 @@ impl LazyFile {
             source: LazyCell::new(),
             file: LazyCell::new()
         }
-    }
-
-    /// Whether the file was accessed in the ongoing compilation.
-    fn accessed(&self) -> bool {
-        self.source.accessed() || self.file.accessed()
-    }
-
-    /// Marks the file as not yet accessed in preparation of the next
-    /// compilation.
-    fn reset(&mut self) {
-        self.source.reset();
-        self.file.reset();
     }
 
     /// Retrieve the source for this file. Will download packages if necessary.

@@ -1,21 +1,28 @@
-use std::{fs, path::{Path, PathBuf}, sync::Arc};
+//! Provides a way to [create a http agent](create_http_agent) with [certificate](Certificate) and
+//! to [download typst packages from the repository](prepare_package).
+//!
+//! ### Used internally.
+
+use std::sync::Arc;
+use std::path::{Path, PathBuf};
 
 use native_tls::{Certificate, TlsConnector};
-use parking_lot::{const_mutex, Mutex};
-use typst::diag::{eco_format, FileResult, PackageError, PackageResult};
+use typst::diag::{eco_format, PackageError, PackageResult};
 use typst_syntax::package::PackageSpec;
 
 use crate::errors::{WrapperError, WrapperResult};
 
-/// `typst-lib-wrapper` user agent
+/// `typst-lib-wrapper` user agent, used when downloading a package.
 const USER_AGENT: &str = concat!("typst-lib-wrapper/", env!("CARGO_PKG_VERSION"));
 
 /// Typst package repository location.
 const HOST: &str = "https://packages.typst.org";
 
-pub fn create_http_agent(
+/// Creates HTTP [Agent](ureq::Agent) with optional X509 [`certificate`](Certificate).
+pub(crate) fn create_http_agent(
     certificate: Option<Certificate>
 ) -> WrapperResult<ureq::Agent> {
+
     let mut builder = ureq::AgentBuilder::new();
     let mut tls = TlsConnector::builder();
 
@@ -41,8 +48,13 @@ pub fn create_http_agent(
     return Ok(builder.build());
 }
 
-/// Make a package available in the on-disk cache.
-pub fn prepare_package(spec: &PackageSpec, http_client: &ureq::Agent) -> PackageResult<PathBuf> {
+/// Tries to resolve package specification (`spec`) to [PathBuf]. \
+/// If the package is not available locally then it'll try to download it from the repository \
+/// using `http_client`. It makes packages available in the on-disk cache.
+pub(crate) fn prepare_package(
+    spec: &PackageSpec,
+    http_client: &ureq::Agent
+) -> PackageResult<PathBuf> {
     let subdir = format!("typst/packages/{}/{}/{}", spec.namespace, spec.name, spec.version);
 
     // Check `data_dir` first.
@@ -73,7 +85,8 @@ pub fn prepare_package(spec: &PackageSpec, http_client: &ureq::Agent) -> Package
     return Err(PackageError::NotFound(spec.clone()));
 }
 
-/// Download a package over the network.
+/// Downloads a typst package with specification `spec` from the repository using `http_client`, \
+/// decompresses and saves it to the `package_dir`.
 fn download_package(
     spec: &PackageSpec,
     package_dir: &Path,
@@ -105,9 +118,10 @@ fn download_package(
         .map_err(|err| PackageError::NetworkFailed(Some(eco_format!("{err}"))))?;
 
     let decompressed = flate2::read::GzDecoder::new(buffer.as_slice());
+
     tar::Archive::new(decompressed).unpack(package_dir)
         .map_err(|err| {
-            fs::remove_dir_all(package_dir).ok(); // Delete malformed archive.
+            std::fs::remove_dir_all(package_dir).ok(); // Delete malformed archive.
             PackageError::MalformedArchive(Some(eco_format!("{err}")))
         })?;
 
