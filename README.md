@@ -1,2 +1,2 @@
 # typst-lib-wrapper
-Wrapper around 'typst' library
+Synchronous wrapper around 'typst' library.
