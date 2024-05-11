@@ -1,14 +1,14 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use chrono::Datelike;
+use chrono::{Datelike, Timelike};
 use comemo::Prehashed;
 use parking_lot::Mutex;
-use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use ecow::EcoVec;
 use typst::diag::{FileResult, SourceDiagnostic};
 use typst::eval::Tracer;
-use typst::foundations::{Bytes, Datetime};
+use typst::foundations::{Bytes, Datetime, Smart};
 use typst::model::Document;
 use typst::text::{Font, FontBook};
 use typst::{Library, World};
@@ -92,6 +92,7 @@ impl World for Compiler {
             }
         };
 
+        Self::date_convert_ymd(with_offset);
         Datetime::from_ymd(
             with_offset.year(),
             with_offset.month().try_into().ok()?,
@@ -108,6 +109,36 @@ impl Compiler {
     {
         let mut map = self.files.lock();
         f(map.entry(id).or_insert_with(|| LazyFile::new(id)))
+    }
+
+    /// Converts [chrono::Datelike] to [typst::foundations::Datetime]. \
+    /// to [typst::foundations::Datetime]. \
+    /// Ignores time, uses just date. \
+    /// If the conversion fails, returns `None`.
+    ///
+    /// ### Used internally.
+    fn date_convert_ymd(input: impl chrono::Datelike) -> Option<Datetime> {
+        Datetime::from_ymd(
+            input.year(),
+            input.month().try_into().ok()?,
+            input.day().try_into().ok()?,
+        )
+    }
+
+    /// Converts [chrono::Datelike] and [chrono::Timelike] to [typst::foundations::Datetime]. \
+    /// Uses both date and time. \
+    /// If the conversion fails, returns `None`.
+    ///
+    /// ### Used internally.
+    fn date_convert_ymd_hms(input: impl chrono::Datelike + chrono::Timelike) -> Option<Datetime> {
+        Datetime::from_ymd_hms(
+            input.year(),
+            input.month().try_into().ok()?,
+            input.day().try_into().ok()?,
+            input.hour().try_into().ok()?,
+            input.minute().try_into().ok()?,
+            input.second().try_into().ok()?,
+        )
     }
 
     pub fn save() {
@@ -157,13 +188,9 @@ impl Compiler {
     //     todo!()
     // }
 
-    pub fn compile_pdf(&self) -> Vec<u8> {
-        todo!()
-    }
-
-    pub fn compile_png(&self) -> CompilerOutput<Vec<Vec<u8>>> {
+    pub fn compile_pdf(&self) -> CompilerOutput<Vec<u8>> {
         let compiler_output: CompilerOutput<Document> = self.compile_document();
-        let mut errors = compiler_output.errors;
+        let errors = compiler_output.errors;
         let warnings = compiler_output.warnings;
 
         let document: Document = match compiler_output.output {
@@ -174,7 +201,37 @@ impl Compiler {
                 warnings
             }
         };
+        let timestamp = Self::date_convert_ymd_hms(self.now);
+        let pdf_bytes = typst_pdf::pdf(&document, Smart::Auto, timestamp);
 
+        return CompilerOutput {
+            output: Some(pdf_bytes),
+            errors,
+            warnings
+        };
+    }
+
+    /// # WARNING MUTEX
+    /// Compiles typst document to PNG.
+    ///
+    /// # Example
+    pub fn compile_png(&self) -> CompilerOutput<Vec<Vec<u8>>> {
+        let compiler_output: CompilerOutput<Document> = self.compile_document();
+        let errors = compiler_output.errors;
+        let warnings = compiler_output.warnings;
+
+        let document: Document = match compiler_output.output {
+            Some(doc) => doc,
+            None => return CompilerOutput {
+                output: None, // 'Bubbles up' `None` variant.
+                errors,
+                warnings
+            }
+        };
+
+        // Gets number of pages in a document and allocates memory upfront.
+        // Because of parallel PNG encoding, the pages buffer needs to be inside a mutex.
+        // The same applies to errors.
         let pages_count = document.pages.len();
         let shared_pages_buffer: Mutex<Vec<Vec<u8>>> = Mutex::new(
             vec![Vec::new(); pages_count]
@@ -183,10 +240,10 @@ impl Compiler {
 
         let _ = document
             .pages
-            .par_iter()
+            .par_iter() // Tries to encode pages to PNG in parallel.
             .enumerate()
             .map(|(page_index, page)| {
-                // Tries to encode page frame
+                // Tries to encode page frame.
                 match typst_render::render(&page.frame, self.ppi / 72.0, self.background)
                     .encode_png()
                 {
@@ -209,10 +266,9 @@ impl Compiler {
 
 
         // Gets pages from the mutex and checks if any `page vector` is empty, which indicates
-        // encoding error occured.
-        let pages = shared_pages_buffer.into_inner(); // Gets pages from the mutex.
+        // encoding error occured. Discards all pages if any encoutered an error.
+        let pages = shared_pages_buffer.into_inner(); // Takes pages from the mutex.
         let encoding_error_occured = pages.iter().any(|x| x.is_empty());
-
         let output: Option<Vec<Vec<u8>>> = if encoding_error_occured {
             None
         } else {
@@ -221,7 +277,7 @@ impl Compiler {
 
         return CompilerOutput {
             output,
-            errors: shared_errors.into_inner(),
+            errors: shared_errors.into_inner(), // Takes errors from the mutex.
             warnings
         };
     }
