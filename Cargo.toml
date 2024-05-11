@@ -30,5 +30,6 @@ typst = "0.11.0"
 typst-assets = { version = "0.11.0", features = ["fonts"] }
 typst-pdf = "0.11.0"
 typst-render = "0.11.0"
+typst-svg = "0.11.0"
 typst-syntax = "0.11.0"
 ureq = { version = "2.9.7", features = ["native-tls"] }

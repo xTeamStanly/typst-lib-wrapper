@@ -15,15 +15,16 @@ use typst::{diag::SourceDiagnostic, model::Document};
 /// # Example
 /// Creates content input and builds the [Compiler].
 /// ```
-/// let content = r##"
-///     #set page(paper: "a4");
-///     = Hello World
-///     Hello world from typst.
-/// "##.to_string();
-/// let input = Input::from(content);
+///     let content = r##"
+///         #set page(paper: "a4");
+///         = Hello World
+///         Hello world from typst.
+///     "##.to_string();
+///     let input = Input::from(content);
 ///
-/// CompilerBuilder::with_input(input).build()
-///     .expect("Couldn't build the compiler");
+///     CompilerBuilder::with_input(input)
+///         .build()
+///         .expect("Couldn't build the compiler");
 /// ```
 ///
 /// ## File
@@ -37,12 +38,13 @@ use typst::{diag::SourceDiagnostic, model::Document};
 /// # Example
 /// Creates file input and builds the [Compiler].
 /// ```
-/// let entry: String = "main.typ".to_string();
-/// let root: PathBuf = "./project".into();
-/// let input = Input::from((entry, root));
+///     let entry: String = "main.typ".to_string();
+///     let root: PathBuf = "./project".into();
+///     let input = Input::from((entry, root));
 ///
-/// CompilerBuilder::with_input(input).build()
-///     .expect("Couldn't build the compiler");
+///     CompilerBuilder::with_input(input)
+///         .build()
+///         .expect("Couldn't build the compiler");
 /// ```
 #[derive(Debug, Clone)]
 pub enum Input {
@@ -69,27 +71,46 @@ impl From<(String, PathBuf)> for Input {
     }
 }
 
-
-
-
+/// Output from the typst compiler. Consists of:
+/// - `output`: Optional compilation result.
+/// - `warnings`: Compiler warnings during compilation.
+/// - `errors`: Compiler errors.
+///
+/// If there were errors during compilation or image encoding `output` field will be `None` \
+/// and you should examine `errors` field. Otherwise just check the `warning` field, but \
+/// that's not mandatory.
+///
+/// Currently `T` can be:
+/// - [Vec\<u8\>](Vec) if the output is PDF.
+/// - [Vec\<Vec\<u8\>\>](Vec) if the output is PNG/SVG, because every page is exported as an image.
+///
+/// # Example
+/// Compiles document to PDF and writes it to the disk.
+/// ```
+///     let entry: String = "main.typ".to_string();
+///     let root: PathBuf = "./project".into();
+///     let input = Input::from((entry, root));
+///
+///     // Build the compiler and compile to PDF.
+///     let compiler = CompilerBuilder::with_input(input).build()
+///         .expect("Couldn't build the compiler");
+///     let compiled = compiler.compile_pdf();
+///
+///     if let Some(pdf) = compiled.output {
+///         // Writes PDF file.
+///         std::fs::write("./main.pdf", pdf)
+///             .expect("Couldn't write PDF");
+///     } else {
+///         // Compilation failed, show (and examine) errors.
+///         dbg!(compiled.errors);
+///     }
+/// ```
 #[derive(Debug)]
 pub struct CompilerOutput<T> {
+    /// Generic compilation output.
     pub output: Option<T>,
+    /// Warnings during compilation.
     pub warnings: EcoVec<SourceDiagnostic>,
+    /// Compilation errors.
     pub errors: EcoVec<SourceDiagnostic>
-}
-
-
-
-#[derive(Debug, Clone, Default)]
-pub enum Format {
-    #[default]
-    Pdf,
-    Png,
-    Svg
-}
-
-pub enum Output {
-    Single(Vec<u8>),
-    Paged { pages: Vec<Vec<u8>> }
 }

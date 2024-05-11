@@ -17,7 +17,7 @@ use typst_syntax::{FileId, Source, Span};
 
 use crate::files::LazyFile;
 use crate::fonts::LazyFont;
-use crate::parameters::{Format, CompilerOutput};
+use crate::parameters::CompilerOutput;
 
 #[derive(Debug)]
 pub struct Compiler {
@@ -31,7 +31,6 @@ pub struct Compiler {
 
     pub(crate) http_client: ureq::Agent,
 
-    pub(crate) format: Format,
     pub(crate) ppi: f32,
     pub(crate) background: Color,
     pub(crate) now: chrono::DateTime<chrono::Utc>,
@@ -112,9 +111,7 @@ impl Compiler {
     }
 
     /// Converts [chrono::Datelike] to [typst::foundations::Datetime]. \
-    /// to [typst::foundations::Datetime]. \
-    /// Ignores time, uses just date. \
-    /// If the conversion fails, returns `None`.
+    /// Ignores time, uses just date. If the conversion fails, returns `None`.
     ///
     /// ### Used internally.
     fn date_convert_ymd(input: impl chrono::Datelike) -> Option<Datetime> {
@@ -126,8 +123,7 @@ impl Compiler {
     }
 
     /// Converts [chrono::Datelike] and [chrono::Timelike] to [typst::foundations::Datetime]. \
-    /// Uses both date and time. \
-    /// If the conversion fails, returns `None`.
+    /// Uses both date and time. If the conversion fails, returns `None`.
     ///
     /// ### Used internally.
     fn date_convert_ymd_hms(input: impl chrono::Datelike + chrono::Timelike) -> Option<Datetime> {
@@ -169,6 +165,8 @@ impl Compiler {
         let mut tracer = Tracer::new();
         let compilation_result = typst::compile(self, &mut tracer);
         let warnings = tracer.warnings();
+
+        // TODO: UPDATE FONT CACHE and add warning to all methods using this one.
 
         return match compilation_result {
             Ok(doc) => CompilerOutput {
@@ -282,7 +280,60 @@ impl Compiler {
         };
     }
 
-    pub fn compile_svg(&self) -> Vec<Vec<u8>> {
+    pub fn compile_svg(&self) -> CompilerOutput<Vec<Vec<u8>>> {
+        let compiler_output: CompilerOutput<Document> = self.compile_document();
+        let errors = compiler_output.errors;
+        let warnings = compiler_output.warnings;
+
+        let document: Document = match compiler_output.output {
+            Some(doc) => doc,
+            None => return CompilerOutput {
+                output: None, // 'Bubbles up' `None` variant.
+                errors,
+                warnings
+            }
+        };
+
+        // Gets number of pages in a document and allocates memory upfront.
+        // Because of parallel SVG compiling, the pages buffer needs to be inside a mutex.
+        // The same applies to errors.
+        let pages_count = document.pages.len();
+        let shared_pages_buffer: Mutex<Vec<Vec<u8>>> = Mutex::new(
+            vec![Vec::new(); pages_count]
+        );
+        let shared_errors: Mutex<EcoVec<SourceDiagnostic>> = Mutex::new(errors);
+
+        let _ = document
+            .pages
+            .par_iter() // Tries to compile pages to SVG in parallel.
+            .enumerate()
+            .map(|(page_index, page)| {
+                // Write SVG to the shared buffer.
+                let buf = typst_svg::svg(&page.frame).into_bytes();
+                {
+                    shared_pages_buffer.lock()[page_index] = buf;
+                }
+            }).collect::<Vec<()>>();
+
+
+        // Gets pages from the mutex and checks if any `page vector` is empty, which indicates
+        // encoding error occured. Discards all pages if any encoutered an error.
+        let pages = shared_pages_buffer.into_inner(); // Takes pages from the mutex.
+        let encoding_error_occured = pages.iter().any(|x| x.is_empty());
+        let output: Option<Vec<Vec<u8>>> = if encoding_error_occured {
+            None
+        } else {
+            Some(pages)
+        };
+
+        return CompilerOutput {
+            output,
+            errors: shared_errors.into_inner(), // Takes errors from the mutex.
+            warnings
+        };
+
+
+
         todo!()
     }
 }

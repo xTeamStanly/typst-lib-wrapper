@@ -26,4 +26,4 @@ pub use builder::CompilerBuilder;
 pub use compiler::Compiler;
 pub use errors::WrapperError;
 pub use fonts::FontCache;
-pub use parameters::{CompilerOutput, Format, Input};
+pub use parameters::{CompilerOutput, Input};
