@@ -1,3 +1,8 @@
+//! Provides a way to interract with the file system. \
+//! Files are lazily loaded on-demand.
+//!
+//! ### Used internally.
+
 use std::path::{Path, PathBuf};
 
 use typst::diag::{FileError, FileResult};
@@ -5,7 +10,6 @@ use typst::foundations::Bytes;
 use typst_syntax::{FileId, Source};
 
 use crate::package::prepare_package;
-
 
 /// Same as [SlotCell](https://docs.rs/crate/typst-cli/latest/source/src/world.rs)
 /// from [typst-cli](https://github.com/typst/typst/tree/main/crates/typst-cli).

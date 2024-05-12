@@ -4,12 +4,12 @@
 use std::path::PathBuf;
 
 use ecow::EcoVec;
-use typst::{diag::SourceDiagnostic, model::Document};
+use typst::diag::SourceDiagnostic;
 
 /// Typst input content/file. \
 ///
 /// ## Content
-/// Creates a typst input from [String]. \
+/// Creates a typst input from anything convertable to [String]. \
 /// This content is passed to the typst compiler.
 ///
 /// # Example
@@ -19,8 +19,8 @@ use typst::{diag::SourceDiagnostic, model::Document};
 ///         #set page(paper: "a4");
 ///         = Hello World
 ///         Hello world from typst.
-///     "##.to_string();
-///     let input = Input::from(content);
+///     "##;
+///     let input = Input::content(content);
 ///
 ///     CompilerBuilder::with_input(input)
 ///         .build()
@@ -38,9 +38,9 @@ use typst::{diag::SourceDiagnostic, model::Document};
 /// # Example
 /// Creates file input and builds the [Compiler].
 /// ```
-///     let entry: String = "main.typ".to_string();
-///     let root: PathBuf = "./project".into();
-///     let input = Input::from((entry, root));
+///     let entry = "main.typ";
+///     let root = "./project";
+///     let input = Input::file(entry, root);
 ///
 ///     CompilerBuilder::with_input(input)
 ///         .build()
@@ -48,26 +48,44 @@ use typst::{diag::SourceDiagnostic, model::Document};
 /// ```
 #[derive(Debug, Clone)]
 pub enum Input {
+    /// Creates typst input from `entry` **filename** and project `root`.
     File { entry: String, root: PathBuf },
 
     /// Creates typst input from [String].
     Content(String)
 }
 
-/// Creates [Input] variant [Input::Content] from [String].
-impl From<String> for Input {
-    fn from(value: String) -> Self {
-        Self::Content(value)
+impl Input {
+    /// Creates [Input] variant [Input::Content] from anything convertable to [String].
+    ///
+    /// # Example
+    /// ```
+    ///     let content = r##"
+    ///         #set page(paper: "a4");
+    ///         = Hello World
+    ///         Hello world from typst.
+    ///     "##;
+    ///     let input = Input::content(content);
+    /// ```
+    pub fn content(content: impl ToString) -> Self {
+        Self::Content(content.to_string())
     }
-}
 
-/// Creates [Input] variant [Input::File] from ([String], [PathBuf]) tuple. \
-/// First tuple element is **_just_** the filename of the main (entry) typst file. \
-/// Second tuple element is the path to the project root. It's used to resolve \
-/// all relative paths, including the entry file.
-impl From<(String, PathBuf)> for Input {
-    fn from(value: (String, PathBuf)) -> Self {
-        Self::File { entry: value.0, root: value.1 }
+    /// Creates [Input] variant [Input::File] from anything convertable to [String] \
+    /// for `entry` and anything convertable [Into] [PathBuf] for `root`.
+    ///
+    /// `entry` is **_just_** the filename of the main (entry) typst file. \
+    /// `root` is the path to the project root. It's used to resolve all relative paths, \
+    /// including the entry file.
+    ///
+    /// # Example
+    /// ```
+    ///     let entry = "main.typ";
+    ///     let root = "./project";
+    ///     let input = Input::file(entry, root);
+    /// ```
+    pub fn file(entry: impl ToString, root: impl Into<PathBuf>) -> Self {
+        Self::File { entry: entry.to_string(), root: root.into() }
     }
 }
 
@@ -87,12 +105,13 @@ impl From<(String, PathBuf)> for Input {
 /// # Example
 /// Compiles document to PDF and writes it to the disk.
 /// ```
-///     let entry: String = "main.typ".to_string();
-///     let root: PathBuf = "./project".into();
-///     let input = Input::from((entry, root));
+///     let entry = "main.typ";
+///     let root = "./project";
+///     let input = Input::file(entry, root);
 ///
 ///     // Build the compiler and compile to PDF.
-///     let compiler = CompilerBuilder::with_input(input).build()
+///     let compiler = CompilerBuilder::with_input(input)
+///         .build()
 ///         .expect("Couldn't build the compiler");
 ///     let compiled = compiler.compile_pdf();
 ///
