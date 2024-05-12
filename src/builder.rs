@@ -46,7 +46,7 @@ use crate::parameters::Input;
 /// for too long. This mutex is **NOT ASYNC** so keep that in mind. Use **'blocking task'** \
 /// if you wish to compile documents in an async environment. Also, when compiling to \
 /// PNGs or SVGs, the compiler tries to encode/convert images to bytes in parallel. \
-/// To sync up compiled pages, again it uses **SYNC** mutex. \
+/// To sync up compiled pages, again it uses **SYNC** mutex.
 ///
 /// ### [FontCache] cloning
 /// Before building the compiler, builder locks [FontCache] and **clones** it for itself. \
@@ -61,12 +61,13 @@ use crate::parameters::Input;
 /// ## Compiling PDF
 /// Shows how to compile existing typst file to PDF. Saves the result to disk.
 /// ```
-///     let entry: String = "main.typ".to_string();
-///     let root: PathBuf = "./project".into();
-///     let input = Input::from((entry, root));
+///     let entry = "main.typ";
+///     let root = "./project";
+///     let input = Input::file(entry, root);
 ///
 ///     // Build the compiler and compile to PDF.
-///     let compiler = CompilerBuilder::with_input(input).build()
+///     let compiler = CompilerBuilder::with_input(input)
+///         .build()
 ///         .expect("Couldn't build the compiler");
 ///     let compiled = compiler.compile_pdf();
 ///
@@ -84,9 +85,9 @@ use crate::parameters::Input;
 ///
 /// For this example let's output transparent PNGs.
 /// ```
-///     let entry: String = "main.typ".to_string();
-///     let root: PathBuf = "./project".into();
-///     let input = Input::from((entry, root));
+///     let entry = "main.typ";
+///     let root = "./project";
+///     let input = Input::file(entry, root);
 ///
 ///     // Build the compiler and compile to PNG.
 ///     let compiler = CompilerBuilder::with_input(input)
@@ -150,9 +151,9 @@ impl CompilerBuilder {
     ///
     /// # Example
     /// ```
-    ///     let entry: String = "main.typ".to_string();
-    ///     let root: PathBuf = "./project".into();
-    ///     let input = Input::from((entry, root));
+    ///     let entry = "main.typ";
+    ///     let root = "./project";
+    ///     let input = Input::file(entry, root);
     ///     let compiler = CompilerBuilder::with_input(input)
     ///         .build()
     ///         .expect("Couldn't build the compiler");
@@ -176,14 +177,14 @@ impl CompilerBuilder {
     ///
     /// # Example
     /// ```
-    ///     let entry: String = "main.typ".to_string();
-    ///     let root: PathBuf = "./project".into();
+    ///     let entry = "main.typ";
+    ///     let root = "./project";
     ///     let compiler = CompilerBuilder::with_file_input(entry, root)
     ///         .build()
     ///         .expect("Couldn't build the compiler");
     /// ```
-    pub fn with_file_input(entry: String, root: PathBuf) -> Self {
-        let input = Input::File { entry, root };
+    pub fn with_file_input(entry: impl ToString, root: impl Into<PathBuf>) -> Self {
+        let input = Input::File { entry: entry.to_string(), root: root.into() };
         return Self::with_input(input);
     }
 
@@ -195,86 +196,81 @@ impl CompilerBuilder {
     ///         #set page(paper: "a4");
     ///         = Hello World
     ///         Hello world from typst.
-    ///     "##.to_string();
+    ///     "##;
     ///     let compiler = CompilerBuilder::with_content_input(content)
     ///         .build()
     ///         .expect("Couldn't build the compiler");
     /// ```
-    pub fn with_content_input(content: String) -> Self {
-        let input = Input::Content(content);
+    pub fn with_content_input(content: impl ToString) -> Self {
+        let input = Input::Content(content.to_string());
         return Self::with_input(input);
     }
 
-    /// Provides data to `sys.inputs` dictionary. [String] tuple in a [vector](Vec).
+    /// Provides data to `sys.inputs` dictionary.
     ///
     /// # Example
-    /// This creates a document with text "rust world".
+    /// This creates a document with text _"rust world"_.
     /// ```
     ///     let content = r##"
     ///         #set page(paper: "a4");
     ///
     ///         #text(sys.inputs.at("language"));
     ///         #text(sys.inputs.at("hello"));
-    ///     "##.to_string();
+    ///     "##;
     ///
-    ///     let sys_inputs: Vec<(String, String)> = vec![
+    ///     let sys_inputs = vec![
     ///         ("language", "rust"),
     ///         ("hello", "world")
-    ///     ]
-    ///     .into_iter()
-    ///     .map(|(key, value)| (String::from(key), String::from(value)))
-    ///     .collect();
+    ///     ];
     ///
     ///     let compiler = CompilerBuilder::with_content_input(content)
     ///         .with_sys_inputs(sys_inputs)
     ///         .build()
     ///         .expect("Couldn't build the compiler");
     /// ```
-    pub fn with_sys_inputs(mut self, sys_inputs: Vec<(String, String)>) -> Self {
-        self.sys_inputs = sys_inputs;
+    pub fn with_sys_inputs(mut self, sys_inputs: Vec<(impl ToString, impl ToString)>) -> Self {
+        let mapped = sys_inputs.into_iter()
+            .map(|(key, value)| (key.to_string(), value.to_string()))
+            .collect();
+        self.sys_inputs = mapped;
         self
     }
 
-    /// Adds a single value to `sys.inputs` dictionary. [String] tuple.
+    /// Adds a single value to `sys.inputs` dictionary.
     ///
     /// # Example
-    /// This creates a document with text "rust".
+    /// This creates a document with text _"rust"_.
     /// ```
     ///     let content = r##"
     ///         #set page(paper: "a4");
     ///
     ///         #text(sys.inputs.at("language"));
-    ///     "##.to_string();
+    ///     "##;
     ///
     ///     let compiler = CompilerBuilder::with_content_input(content)
-    ///         .add_sys_input(("language".to_string(), "rust".to_string()))
+    ///         .add_sys_input(("language", "rust"))
     ///         .build()
     ///         .expect("Couldn't build the compiler");
     /// ```
-    pub fn add_sys_input(mut self, sys_input: (String, String)) -> Self {
-        self.sys_inputs.push(sys_input);
+    pub fn add_sys_input(mut self, sys_input: (impl ToString, impl ToString)) -> Self {
+        self.sys_inputs.push((sys_input.0.to_string(), sys_input.1.to_string()));
         self
     }
 
-    /// Adds multiple values to `sys.inputs` dictionary. [String] tuple in a [vector](Vec).
+    /// Adds multiple values to `sys.inputs` dictionary.
     ///
     /// # Example
-    /// This creates a document with text "rust world".
+    /// This creates a document with text _"rust world"_.
     /// ```
     ///     let content = r##"
     ///         #set page(paper: "a4");
     ///
     ///         #text(sys.inputs.at("language"));
     ///         #text(sys.inputs.at("hello"));
-    ///     "##.to_string();
+    ///     "##;
     ///
-    ///     let sys_inputs_1: Vec<(String, String)> = vec![
-    ///         ("language".to_string(), "rust".to_string())
-    ///     ];
-    ///
-    ///     let sys_inputs_2: Vec<(String, String)> = vec![
-    ///         ("hello".to_string(), "world".to_string())
-    ///     ];
+    ///     let sys_inputs_1 = vec![("language", "rust")];
+    ///     let sys_inputs_2 = vec![("hello", "world")];
     ///
     ///     let compiler = CompilerBuilder::with_content_input(content)
     ///         .add_sys_inputs(sys_inputs_1)
@@ -282,34 +278,251 @@ impl CompilerBuilder {
     ///         .build()
     ///         .expect("Couldn't build the compiler");
     /// ```
-    pub fn add_sys_inputs(mut self, sys_inputs: Vec<(String, String)>) -> Self {
-        self.sys_inputs.extend(sys_inputs);
+    pub fn add_sys_inputs(mut self, sys_inputs: Vec<(impl ToString, impl ToString)>) -> Self {
+        let mapped: Vec<(String, String)> = sys_inputs
+            .into_iter()
+            .map(|(key, value)| (key.to_string(), value.to_string()))
+            .collect();
+        self.sys_inputs.extend(mapped);
         self
     }
 
-    pub fn with_custom_data(mut self, custom_data: Vec<(String, Value)>) -> Self {
-        self.custom_data = custom_data;
-        self
-    }
-    pub fn add_custom_data_one(mut self, custom_data: (String, Value)) -> Self {
-        self.custom_data.push(custom_data);
-        self
-    }
-    pub fn add_custom_data_many(mut self, custom_data: Vec<(String, Value)>) -> Self {
-        self.custom_data.extend(custom_data);
+    /// Provides a way to override typst standard library and add custom symbols to the \
+    /// global context.
+    ///
+    /// # Note / Warning
+    /// Mind that this will overload ANY symbol, so use it with caution. It is recommended \
+    /// that **all custom data starts with prefix "_".**
+    ///
+    /// # Example
+    /// This creates a document with text _"Rust 1.0 was released on 15.05.2015."_. \
+    /// The text "Rust" is orange. Currently typst floats aren't displaying a decimal \
+    /// point when passed a floating point that can be converted to integer without loss. \
+    /// That's why there's ".0" after "#_VERSION", it is not a tuple index.
+    /// ```
+    ///     use typst_lib_wrapper::reexports::{IntoValue, Datetime, Color};
+    ///
+    ///     let content = r##"
+    ///         #set page(paper: "a4");
+    ///
+    ///         #text(fill: _COLOR)[#_LANGUAGE]
+    ///         #_VERSION.0 was released on
+    ///         #_DATE.display("[day].[month].[year]").
+    ///     "##;
+    ///
+    ///     let language = "Rust".into_value();
+    ///     let date = Datetime::from_ymd(2015, 5, 15).expect("Invalid date").into_value();
+    ///     let color = Color::from_u8(247, 75, 0, 255).into_value();
+    ///     let version = 1.0_f64.into_value();
+    ///
+    ///     let custom_data = vec![
+    ///         ("_LANGUAGE", language),
+    ///         ("_DATE", date),
+    ///         ("_COLOR", color),
+    ///         ("_VERSION", version)
+    ///     ];
+    ///
+    ///     let compiler = CompilerBuilder::with_content_input(content)
+    ///         .with_custom_data(custom_data)
+    ///         .build()
+    ///         .expect("Couldn't build the compiler");
+    /// ```
+    pub fn with_custom_data(mut self, custom_data: Vec<(impl ToString, impl IntoValue)>) -> Self {
+        let mapped: Vec<(String, Value)> = custom_data
+            .into_iter()
+            .map(|(key, value)| (key.to_string(), value.into_value()))
+            .collect();
+        self.custom_data = mapped;
         self
     }
 
-    pub fn with_font_paths(mut self, font_paths: Vec<PathBuf>) -> Self {
-        self.font_paths = font_paths;
+    /// Adds a single value to global typst symbols overriding the typst library.
+    ///
+    /// # Note / Warning
+    /// Mind that this will overload ANY symbol, so use it with caution. It is recommended \
+    /// that **all custom data starts with prefix "_".**
+    ///
+    /// # Example
+    /// This creates a document with text _"Rust 1.0 was released on 15.05.2015."_. \
+    /// The text "Rust" is orange. Currently typst floats aren't displaying a decimal \
+    /// point when passed a floating point that can be converted to integer without loss. \
+    /// That's why there's ".0" after "#_VERSION", it is not a tuple index.
+    /// ```
+    ///     use typst_lib_wrapper::reexports::{IntoValue, Datetime, Color};
+    ///
+    ///     let content = r##"
+    ///         #set page(paper: "a4");
+    ///
+    ///         #text(fill: _COLOR)[#_LANGUAGE]
+    ///         #_VERSION.0 was released on
+    ///         #_DATE.display("[day].[month].[year]").
+    ///     "##.to_string();
+    ///
+    ///     let language = "Rust";
+    ///     let date = Datetime::from_ymd(2015, 5, 15).expect("Invalid date");
+    ///     let color = Color::from_u8(247, 75, 0, 255);
+    ///     let version = 1.0_f64;
+    ///
+    ///     let compiler = CompilerBuilder::with_content_input(content)
+    ///         .add_custom_data_one(("_LANGUAGE", language))
+    ///         .add_custom_data_one(("_DATE", date))
+    ///         .add_custom_data_one(("_COLOR", color))
+    ///         .add_custom_data_one(("_VERSION", version))
+    ///         .build()
+    ///         .expect("Couldn't build the compiler");
+    /// ```
+    pub fn add_custom_data_one(mut self, custom_data: (impl ToString, impl IntoValue)) -> Self {
+        self.custom_data.push((custom_data.0.to_string(), custom_data.1.into_value()));
         self
     }
-    pub fn add_font_path(mut self, font_paths: PathBuf) -> Self {
-        self.font_paths.push(font_paths);
+
+    /// Adds multiple values to global typst symbols overriding the typst library.
+    ///
+    /// # Note / Warning
+    /// Mind that this will overload ANY symbol, so use it with caution. It is recommended \
+    /// that **all custom data starts with prefix "_".**
+    ///
+    /// # Example
+    /// This creates a document with text _"Rust 1.0 was released on 15.05.2015."_. \
+    /// The text "Rust" is orange. Currently typst floats aren't displaying a decimal \
+    /// point when passed a floating point that can be converted to integer without loss. \
+    /// That's why there's ".0" after "#_VERSION", it is not a tuple index.
+    /// ```
+    ///     use typst_lib_wrapper::reexports::{IntoValue, Datetime, Color};
+    ///
+    ///     let content = r##"
+    ///         #set page(paper: "a4");
+    ///
+    ///         #text(fill: _COLOR)[#_LANGUAGE]
+    ///         #_VERSION.0 was released on
+    ///         #_DATE.display("[day].[month].[year]").
+    ///     "##.to_string();
+    ///
+    ///     let language = "Rust".into_value();
+    ///     let date = Datetime::from_ymd(2015, 5, 15).expect("Invalid date").into_value();
+    ///     let color = Color::from_u8(247, 75, 0, 255).into_value();
+    ///     let version = 1.0_f64.into_value();
+    ///
+    ///     let custom_data_1 = vec![("_LANGUAGE", language), ("_DATE", date)];
+    ///     let custom_data_2 = vec![("_COLOR", color), ("_VERSION", version)];
+    ///
+    ///     let compiler = CompilerBuilder::with_content_input(content)
+    ///         .add_custom_data_many(custom_data_1)
+    ///         .add_custom_data_many(custom_data_2)
+    ///         .build()
+    ///         .expect("Couldn't build the compiler");
+    /// ```
+    pub fn add_custom_data_many(mut self, custom_data: Vec<(impl ToString, impl IntoValue)>) -> Self {
+        let mapped: Vec<(String, Value)> = custom_data
+            .into_iter()
+            .map(|(key, value)| (key.to_string(), value.into_value()))
+            .collect();
+
+        self.custom_data.extend(mapped);
         self
     }
-    pub fn add_font_paths(mut self, font_paths: Vec<PathBuf>) -> Self {
-        self.font_paths.extend(font_paths);
+
+    /// Provides a way to add additional fonts to the [FontCache].
+    ///
+    /// # Note / Warning
+    /// ### [FontCache] cloning
+    /// Before building the compiler, builder locks [FontCache] and **clones** it for itself. \
+    /// To reduce [FontCache] size it is recommended to avoid loading all system fonts and \
+    /// to load only needed fonts. In practise this won't be that big of a deal, because \
+    /// all fonts are lazily loaded into memory, but they stay there, so **manually empty** \
+    /// the [FontCache].
+    ///
+    /// # Example
+    /// Loads custom fonts into [FontCache].
+    /// ```
+    ///     let content = r##"
+    ///         #set page(paper: "a4");
+    ///         This is Times New Roman.
+    ///
+    ///         #set text(font: "Comic Sans");
+    ///         This is Comic Sans.
+    ///     "##;
+    ///
+    ///     let font_paths = vec![
+    ///         "./fonts/times_new_roman.ttf",
+    ///         "./fonts/comic_sans.ttf"
+    ///     ];
+    ///
+    ///     let compiler = CompilerBuilder::with_content_input(content)
+    ///         .with_font_paths(font_paths)
+    ///         .build()
+    ///         .expect("Couldn't build the compiler");
+    /// ```
+    pub fn with_font_paths(mut self, font_paths: Vec<impl Into<PathBuf>>) -> Self {
+        self.font_paths = font_paths.into_iter().map(|x| x.into()).collect();
+        self
+    }
+
+    /// Adds additional font path to the [FontCache].
+    ///
+    /// # Note / Warning
+    /// ### [FontCache] cloning
+    /// Before building the compiler, builder locks [FontCache] and **clones** it for itself. \
+    /// To reduce [FontCache] size it is recommended to avoid loading all system fonts and \
+    /// to load only needed fonts. In practise this won't be that big of a deal, because \
+    /// all fonts are lazily loaded into memory, but they stay there, so **manually empty** \
+    /// the [FontCache].
+    ///
+    /// # Example
+    /// Loads custom fonts into [FontCache].
+    /// ```
+    ///     let content = r##"
+    ///         #set page(paper: "a4");
+    ///         This is Times New Roman.
+    ///
+    ///         #set text(font: "Comic Sans");
+    ///         This is Comic Sans.
+    ///     "##;
+    ///
+    ///     let compiler = CompilerBuilder::with_content_input(content)
+    ///         .add_font_path("./fonts/times_new_roman.ttf")
+    ///         .add_font_path("./fonts/comic_sans.ttf")
+    ///         .build()
+    ///         .expect("Couldn't build the compiler");
+    /// ```
+    pub fn add_font_path(mut self, font_paths: impl Into<PathBuf>) -> Self {
+        self.font_paths.push(font_paths.into());
+        self
+    }
+
+    /// Adds additional font paths to the [FontCache].
+    ///
+    /// # Note / Warning
+    /// ### [FontCache] cloning
+    /// Before building the compiler, builder locks [FontCache] and **clones** it for itself. \
+    /// To reduce [FontCache] size it is recommended to avoid loading all system fonts and \
+    /// to load only needed fonts. In practise this won't be that big of a deal, because \
+    /// all fonts are lazily loaded into memory, but they stay there, so **manually empty** \
+    /// the [FontCache].
+    ///
+    /// # Example
+    /// Loads custom fonts into [FontCache].
+    /// ```
+    ///     let content = r##"
+    ///         #set page(paper: "a4");
+    ///         This is Times New Roman.
+    ///
+    ///         #set text(font: "Comic Sans");
+    ///         This is Comic Sans.
+    ///     "##;
+    ///
+    ///     let font_paths_1 = vec!["./fonts/times_new_roman.ttf"];
+    ///     let font_paths_2 = vec!["./fonts/comic_sans.ttf"];
+    ///
+    ///     let compiler = CompilerBuilder::with_content_input(content)
+    ///         .add_font_paths(font_paths_1)
+    ///         .add_font_paths(font_paths_2)
+    ///         .build()
+    ///         .expect("Couldn't build the compiler");
+    /// ```
+    pub fn add_font_paths(mut self, font_paths: Vec<impl Into<PathBuf>>) -> Self {
+        let mapped: Vec<PathBuf> = font_paths.into_iter().map(|x| x.into()).collect();
+        self.font_paths.extend(mapped);
         self
     }
 
@@ -351,7 +564,7 @@ impl CompilerBuilder {
     ///         #set page(paper: "a4");
     ///         = Hello World
     ///         Hello world from typst.
-    ///     "##.to_string();
+    ///     "##;
     ///
     ///     let compiler = CompilerBuilder::with_content_input(content)
     ///         .with_certificate(certificate)
