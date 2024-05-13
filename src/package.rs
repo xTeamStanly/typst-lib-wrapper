@@ -18,7 +18,7 @@ const USER_AGENT: &str = concat!("typst-lib-wrapper/", env!("CARGO_PKG_VERSION")
 /// Typst package repository location.
 const HOST: &str = "https://packages.typst.org";
 
-/// Creates HTTP [Agent](ureq::Agent) with optional X509 [`certificate`](Certificate).
+/// Creates HTTP `ureq::Agent` with optional X509 [`Certificate`](Certificate).
 pub(crate) fn create_http_agent(
     certificate: Option<Certificate>
 ) -> WrapperResult<ureq::Agent> {
@@ -48,8 +48,9 @@ pub(crate) fn create_http_agent(
     return Ok(builder.build());
 }
 
-/// Tries to resolve package specification (`spec`) to [PathBuf]. \
-/// If the package is not available locally then it'll try to download it from the repository \
+/// Tries to resolve package specification (`spec`) to [PathBuf].
+///
+/// If the package is not available locally then it'll try to download it from the repository
 /// using `http_client`. It makes packages available in the on-disk cache.
 pub(crate) fn prepare_package(
     spec: &PackageSpec,
@@ -85,7 +86,7 @@ pub(crate) fn prepare_package(
     return Err(PackageError::NotFound(spec.clone()));
 }
 
-/// Downloads a typst package with specification `spec` from the repository using `http_client`, \
+/// Downloads a typst package with specification `spec` from the repository using `http_client`,
 /// decompresses and saves it to the `package_dir`.
 fn download_package(
     spec: &PackageSpec,

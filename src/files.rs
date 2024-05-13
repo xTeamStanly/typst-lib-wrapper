@@ -96,7 +96,8 @@ impl LazyFile {
         }
     }
 
-    /// Resolves the path of a file id on the system, downloading a package if necessary. \
+    /// Resolves the path of a file id on the system, downloading a package if necessary.
+    ///
     /// Determine the root path relative to which the file path will be resolved.
     fn system_path(
         project_root: &Path,

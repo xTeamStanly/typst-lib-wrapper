@@ -7,6 +7,7 @@ use typst::diag::{FileError, PackageError};
 
 pub type WrapperResult<T> = Result<T, WrapperError>;
 
+/// Wrapper wrapping all possible errors.
 #[derive(Debug, Error)]
 #[error("{0}")]
 pub enum WrapperError {
@@ -38,7 +39,7 @@ pub enum WrapperError {
     #[error("IO: `{0}`")]
     Io(std::io::Error),
 
-    /// Boxed `ureq::Error` because it's too large.
+    /// Boxed [ureq::Error] because it's too large.
     #[error("HTTP: `{0}`")]
     Http(Box<ureq::Error>),
 

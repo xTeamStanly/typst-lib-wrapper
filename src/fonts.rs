@@ -27,8 +27,9 @@ pub(crate) struct LazyFont {
 }
 
 impl LazyFont {
-    /// Gets the font data. \
-    /// If the font is not loaded, loads the font from disk. \
+    /// Gets the font data.
+    ///
+    /// If the font is not loaded, loads the font from disk.
     /// Returns `None` is error occurred.
     pub(crate) fn get(&self) -> Option<Font> {
         let font = self.font.get_or_init(|| {
@@ -40,45 +41,46 @@ impl LazyFont {
     }
 }
 
-/// Global font cache, initialized once on-demand. \
-/// Many threads could access this cache so it's behind a [Mutex].
+/// Global font cache, initialized once on-demand.
+///
+/// Many threads could access this cache so it's behind a Mutex.
 static FONT_CACHE: Mutex<Option<FontCache>> = const_mutex(None);
 
 /// Caches and searches for fonts.
 ///
-/// By default the cache will not load all system fonts. This can be enabled with \
+/// By default the cache will not load all system fonts. This can be enabled with
 /// custom initialization - `::init(true, None)`.
 ///
-/// The cache doesn't need to be initialized explicitly, because it will initialize \
-/// when compiling documents. Custom initialization method exists if you wish \
+/// The cache doesn't need to be initialized explicitly, because it will initialize
+/// when compiling documents. Custom initialization method exists if you wish
 /// to include/exclude all system fonts or load custom fonts.
 ///
 /// # Note / Warning
-/// Overtime the cache accumulates allocated font bytes. This can happen when adding \
-/// more and more fonts. One crude way to deal with this is to periodically empty cache \
-/// so it releases memory. This is an extreme case and **probably** shouldn't be \
+/// Overtime the cache accumulates allocated font bytes. This can happen when adding
+/// more and more fonts. One crude way to deal with this is to periodically empty cache
+/// so it releases memory. This is an extreme case and **probably** shouldn't be
 /// that big of a deal if you are not using an extreme amount of fonts.
 ///
-/// ### Blocking [Mutex]
-/// Any operation on the [FontCache] will lock the [Mutex]. This mutex is **NOT ASYNC** \
-/// so keep that in mind. Use **'blocking task'** provided by your runtime \
+/// ### Blocking Mutex
+/// Any operation on the [FontCache] will lock the Mutex. This mutex is **NOT ASYNC**
+/// so keep that in mind. Use **'blocking task'** provided by your runtime
 /// if you wish to use it in an async environment.
 ///
 /// # Examples
 /// Initializes [FontCache] without system fonts including custom fonts directories.
 /// ```
-///     let font_dirs = vec![
-///         "./assets/fonts",
-///         "~/path/to/custom/fonts"
-///     ];
-///     FontCache::init(false, Some(font_dirs))
-///         .expect("Cache error");
+/// let font_dirs = vec![
+///     "./assets/fonts",
+///     "~/path/to/custom/fonts"
+/// ];
+/// FontCache::init(false, Some(font_dirs))
+///     .expect("Cache error");
 /// ```
 ///
 /// Initializes [FontCache] with just the system fonts. Note the `None::<Vec<&str>>`.
 /// ```
-///     FontCache::init(true, None::<Vec<&str>>)
-///         .expect("Cache error");
+/// FontCache::init(true, None::<Vec<&str>>)
+///     .expect("Cache error");
 /// ```
 ///
 /// Docs: [FontSearcher](https://docs.rs/crate/typst-cli/0.11.0/source/src/fonts.rs)
@@ -92,24 +94,24 @@ pub struct FontCache {
 
 impl FontCache {
 
-    /// Returns the size of lazily loaded fonts currently in memory. \
+    /// Returns the size of lazily loaded fonts currently in memory.
     /// The size is in **bytes**.
     ///
-    /// If you wish to include embedded fonts set `include_embedded_fonts` to `true`. \
+    /// If you wish to include embedded fonts set `include_embedded_fonts` to `true`.
     /// It is advised to set this to `false`.
     ///
     /// # Note / Warning
-    /// This will lock the [FontCache] [Mutex]. This [Mutex] is **NOT ASYNC** \
-    /// so keep that in mind. Use **'blocking task'** provided by your runtime \
+    /// This will lock the [FontCache] Mutex. This Mutex is **NOT ASYNC**
+    /// so keep that in mind. Use **'blocking task'** provided by your runtime
     /// if you wish to use it in an async environment.
     ///
     /// # Example
     /// Clears cache if fonts take more then 64MB, excluding embedded fonts.
     /// ```
-    ///     let size = FontCache::cache_size(false).expect("Cache error");
-    ///     if size > 64_000_000 {
-    ///         FontCache::clear_cache(false).expect("Cache error");
-    ///     }
+    /// let size = FontCache::cache_size(false).expect("Cache error");
+    /// if size > 64_000_000 {
+    ///     FontCache::clear_cache(false).expect("Cache error");
+    /// }
     /// ```
     pub fn cache_size(include_embedded_fonts: bool) -> WrapperResult<usize> {
         let mut font_cache_mutex = FONT_CACHE.lock();
@@ -132,25 +134,25 @@ impl FontCache {
     /// Clears the [FontCache] by dropping all the lazily loaded font data.
     ///
     /// If you wish to drop embedded font data set `include_embedded_fonts` to `true`.
-    /// It is advised to set this to `false`, because you can 'irreversably' unload them. \
+    /// It is advised to set this to `false`, because you can 'irreversably' unload them.
     ///
     /// # Note / Warning
-    /// If you choose to clear font data for embedded fonts, mind that you will \
-    /// probably irreversably make them inaccessible. They are loaded on [FontCache] \
-    /// initialization if the feature `embed_typst_fonts` is enabled, otherwise \
+    /// If you choose to clear font data for embedded fonts, mind that you will
+    /// probably irreversably make them inaccessible. They are loaded on [FontCache]
+    /// initialization if the feature `embed_typst_fonts` is enabled, otherwise
     /// you will need to manualy provide a path to them (or have them installed).
     ///
-    /// This will lock the [FontCache] [Mutex]. This [Mutex] is **NOT ASYNC** \
-    /// so keep that in mind. Use **'blocking task'** provided by your runtime \
+    /// This will lock the [FontCache] Mutex. This Mutex is **NOT ASYNC**
+    /// so keep that in mind. Use **'blocking task'** provided by your runtime
     /// if you wish to use it in an async environment.
     ///
     /// # Example
     /// Clears cache if fonts take more then 64MB, excluding embedded fonts.
     /// ```
-    ///     let size = FontCache::cache_size(false).expect("Cache error");
-    ///     if size > 64_000_000 {
-    ///         FontCache::clear_cache(false).expect("Cache error");
-    ///     }
+    /// let size = FontCache::cache_size(false).expect("Cache error");
+    /// if size > 64_000_000 {
+    ///     FontCache::clear_cache(false).expect("Cache error");
+    /// }
     /// ```
     pub fn clear_cache(include_embedded_fonts: bool) -> WrapperResult<()> {
         let mut font_cache_mutex = FONT_CACHE.lock();
@@ -168,12 +170,12 @@ impl FontCache {
 
     /// Updates the cache if detects that there are new lazily loaded fonts.
     ///
-    /// - `new_fonts`: After compilation maybe we loaded some [lazy fonts](LazyFont). \
+    /// - `new_fonts`: After compilation maybe we loaded some [lazy fonts](LazyFont).
     /// If we did this [Vec] will contain them.
     ///
     /// # Note / Warning
-    /// This will lock the [FontCache](crate::fonts::FontCache) [Mutex] and update it with lazily \
-    /// loaded fonts. This mutex is **NOT ASYNC** so keep that in mind. \
+    /// This will lock the [FontCache](crate::fonts::FontCache) Mutex and update it with lazily
+    /// loaded fonts. This mutex is **NOT ASYNC** so keep that in mind.
     /// Please use **'blocking task'** provided by your async runtime.
     ///
     /// ### Used internally.
@@ -254,7 +256,7 @@ impl FontCache {
         Ok(updated)
     }
 
-    /// Acquires [global font cache](FONT_CACHE), **clones** [FontBook] and creates
+    /// Acquires [global font cache](FontCache), **clones** [FontBook] and creates
     /// [LazyFont] [Vec] by **cloning** and returns them as tuple.
     ///
     /// ### Used internally.
@@ -271,7 +273,7 @@ impl FontCache {
     /// Returns mutable reference to existing [FontCache] or initializes new one.
     ///
     /// # Note / Warning
-    /// [Global font cache](FONT_CACHE) must be **LOCKED** before calling this function.
+    /// [Global font cache](FontCache) must be **LOCKED** before calling this function.
     ///
     /// ### Used internally.
     fn get_mut_or_init(font_cache: &mut Option<FontCache>) -> WrapperResult<&mut Self> {
@@ -285,10 +287,10 @@ impl FontCache {
         }
     }
 
-    /// Inserts all fonts to the [global font cache](FONT_CACHE) from the provided `database`.
+    /// Inserts all fonts to the [global font cache](FontCache) from the provided `database`.
     ///
     /// # Note / Warning
-    /// [Global font cache](FONT_CACHE) must be **LOCKED** before calling this function.
+    /// [Global font cache](FontCache) must be **LOCKED** before calling this function.
     ///
     /// ### Used internally.
     #[inline]
@@ -321,22 +323,22 @@ impl FontCache {
         Ok(())
     }
 
-    /// Creates a [LazyFont] and inserts it into [FontCache].
+    /// Creates a lazy font and inserts it into [FontCache].
     ///
-    /// - `font_path` - Anything that can be converted to [PathBuf] pointing \
+    /// - `font_path` - Anything that can be converted to [PathBuf] pointing
     /// to a font file.
     ///
     /// # Note / Warning
-    /// ### Blocking [Mutex]
-    /// Any operation on the [FontCache] will lock the [Mutex]. This mutex is **NOT ASYNC** \
-    /// so keep that in mind. Use **'blocking task'** provided by your runtime \
+    /// ### Blocking Mutex
+    /// Any operation on the [FontCache] will lock the Mutex. This mutex is **NOT ASYNC**
+    /// so keep that in mind. Use **'blocking task'** provided by your runtime
     /// if you wish to use it in an async environment.
     ///
     /// # Example
     /// Inserts a font into [FontCache].
     /// ```
-    ///     FontCache::insert_one("./assets/fonts/times_new_roman.ttf")
-    ///         .expect("Cache error");
+    /// FontCache::insert_one("./assets/fonts/times_new_roman.ttf")
+    ///     .expect("Cache error");
     /// ```
     pub fn insert_one(font_path: impl Into<PathBuf>) -> WrapperResult<()> {
         let mut font_cache_mutex = FONT_CACHE.lock();
@@ -349,27 +351,27 @@ impl FontCache {
         return Self::insert_from_database(font_cache, db);
     }
 
-    /// For each font path in a [Vec] creates a [LazyFont] and inserts it into [FontCache].
+    /// For each font path in a [Vec] creates a lazy font and inserts it into [FontCache].
     ///
     /// - `font_paths` - [Vec] containing anything that can be converted into [PathBuf]
     /// with each being a font path.
     ///
     /// # Note / Warning
-    /// ### Blocking [Mutex]
-    /// Any operation on the [FontCache] will lock the [Mutex]. This mutex is **NOT ASYNC** \
-    /// so keep that in mind. Use **'blocking task'** provided by your runtime \
+    /// ### Blocking Mutex
+    /// Any operation on the [FontCache] will lock the Mutex. This mutex is **NOT ASYNC**
+    /// so keep that in mind. Use **'blocking task'** provided by your runtime
     /// if you wish to use it in an async environment.
     ///
     /// # Example
     /// Inserts some fonts into [FontCache].
     /// ```
-    ///     let font_paths = vec![
-    ///         "./assets/fonts/times_new_roman.ttf",
-    ///         "~/path/to/custom/fonts/comic_sans.ttf"
-    ///     ];
+    /// let font_paths = vec![
+    ///     "./assets/fonts/times_new_roman.ttf",
+    ///     "~/path/to/custom/fonts/comic_sans.ttf"
+    /// ];
     ///
-    ///     FontCache::insert_many(font_paths)
-    ///         .expect("Cache error");
+    /// FontCache::insert_many(font_paths)
+    ///     .expect("Cache error");
     /// ```
     pub fn insert_many(font_paths: Vec<impl Into<PathBuf>>) -> WrapperResult<()> {
         let mut font_cache_mutex = FONT_CACHE.lock();
@@ -384,22 +386,22 @@ impl FontCache {
         return Self::insert_from_database(font_cache, db);
     }
 
-    /// For each font in a directory creates a [LazyFont] and inserts it into [FontCache].
+    /// For each font in a directory creates a lazy font and inserts it into [FontCache].
     ///
-    /// - `dir_path` - Anything that can be converted to [PathBuf] pointing to \
+    /// - `dir_path` - Anything that can be converted to [PathBuf] pointing to
     /// a directory containing fonts.
     ///
     /// # Note / Warning
-    /// ### Blocking [Mutex]
-    /// Any operation on the [FontCache] will lock the [Mutex]. This mutex is **NOT ASYNC** \
-    /// so keep that in mind. Use **'blocking task'** provided by your runtime \
+    /// ### Blocking Mutex
+    /// Any operation on the [FontCache] will lock the Mutex. This mutex is **NOT ASYNC**
+    /// so keep that in mind. Use **'blocking task'** provided by your runtime
     /// if you wish to use it in an async environment.
     ///
     /// # Example
     /// Inserts some directories into [FontCache].
     /// ```
-    ///     FontCache::insert_dir("./assets/fonts")
-    ///         .expect("Cache error");
+    /// FontCache::insert_dir("./assets/fonts")
+    ///     .expect("Cache error");
     /// ```
     pub fn insert_dir(dir_path: impl Into<PathBuf>) -> WrapperResult<()> {
         let mut font_cache_mutex = FONT_CACHE.lock();
@@ -411,27 +413,27 @@ impl FontCache {
         return Self::insert_from_database(font_cache, db);
     }
 
-    /// For each font in each directory creates a [LazyFont] and inserts it into [FontCache].
+    /// For each font in each directory creates a lazy font and inserts it into [FontCache].
     ///
-    /// - `dirs_path` - [Vec] containing anything that can be converted to [PathBuf] \
+    /// - `dirs_path` - [Vec] containing anything that can be converted to [PathBuf]
     /// with each being a fonts directory path.
     ///
     /// # Note / Warning
-    /// ### Blocking [Mutex]
-    /// Any operation on the [FontCache] will lock the [Mutex]. This mutex is **NOT ASYNC** \
-    /// so keep that in mind. Use **'blocking task'** provided by your runtime \
+    /// ### Blocking Mutex
+    /// Any operation on the [FontCache] will lock the Mutex. This mutex is **NOT ASYNC**
+    /// so keep that in mind. Use **'blocking task'** provided by your runtime
     /// if you wish to use it in an async environment.
     ///
     /// # Example
     /// Inserts some directories into [FontCache].
     /// ```
-    ///     let font_dirs = vec![
-    ///         "./assets/fonts",
-    ///         "~/path/to/custom/fonts"
-    ///     ];
+    /// let font_dirs = vec![
+    ///     "./assets/fonts",
+    ///     "~/path/to/custom/fonts"
+    /// ];
     ///
-    ///     FontCache::insert_dirs(font_dirs)
-    ///         .expect("Cache error");
+    /// FontCache::insert_dirs(font_dirs)
+    ///     .expect("Cache error");
     /// ```
     pub fn insert_dirs(dirs_path: Vec<impl Into<PathBuf>>) -> WrapperResult<()> {
         let mut font_cache_mutex = FONT_CACHE.lock();
@@ -445,14 +447,14 @@ impl FontCache {
         return Self::insert_from_database(font_cache, db);
     }
 
-    /// Loads all operating system fonts, custom fonts and returns [FontCache] struct. \
+    /// Loads all operating system fonts, custom fonts and returns [FontCache] struct.
     ///
-    /// You can choose to include all system fonts during the font search. If you have \
-    /// a custom font directory or directories you can also pass them as a [Vec] of \
+    /// You can choose to include all system fonts during the font search. If you have
+    /// a custom font directory or directories you can also pass them as a [Vec] of
     /// [paths](PathBuf) to directories containing fonts.
     ///
-    /// `include_system_fonts` - Notes if all system fonts should be loaded. \
-    /// `dir_paths` - Optional [Vec] of [paths](PathBuf) to directories containing fonts.
+    /// - `include_system_fonts` - Notes if all system fonts should be loaded.
+    /// - `dir_paths` - Optional [Vec] of [paths](PathBuf) to directories containing fonts.
     ///
     /// ### Used internally.
     #[inline]
@@ -529,9 +531,9 @@ impl FontCache {
     /// Initializes [FontCache] without 'custom fonts' and excluding all system fonts.
     ///
     /// # Note / Warning
-    /// ### Blocking [Mutex]
-    /// Any operation on the [FontCache] will lock the [Mutex]. This mutex is **NOT ASYNC** \
-    /// so keep that in mind. Use **'blocking task'** provided by your runtime \
+    /// ### Blocking Mutex
+    /// Any operation on the [FontCache] will lock the Mutex. This mutex is **NOT ASYNC**
+    /// so keep that in mind. Use **'blocking task'** provided by your runtime
     /// if you wish to use it in an async environment.
     pub fn init_default() -> WrapperResult<()> {
         let mut font_cache_mutex = FONT_CACHE.lock();
@@ -543,25 +545,26 @@ impl FontCache {
     }
 
     /// Loads all operating system fonts, custom fonts and initializes
-    /// [global font cache](FONT_CACHE). \
+    /// [global font cache](FontCache).
+    ///
     /// This will initialize the font cache with provided fonts which are lazily loaded on-demand.
     ///
-    /// You can choose to include all system fonts during the font search. \
-    /// If you have a custom font directory you can use [init_with_dirs](Self::init_with_dirs). \
+    /// You can choose to include all system fonts during the font search.
+    /// If you have a custom font directory you can use [init_with_dirs](Self::init_with_dirs).
     /// This function will automatically **overwrite** current global font cache.
     ///
     /// - `include_system_fonts` - Notes if all system fonts should be loaded.
     ///
     /// # Note / Warning
-    /// ### Blocking [Mutex]
-    /// Any operation on the [FontCache] will lock the [Mutex]. This mutex is **NOT ASYNC** \
-    /// so keep that in mind. Use **'blocking task'** provided by your runtime \
+    /// ### Blocking Mutex
+    /// Any operation on the [FontCache] will lock the Mutex. This mutex is **NOT ASYNC**
+    /// so keep that in mind. Use **'blocking task'** provided by your runtime
     /// if you wish to use it in an async environment.
     ///
     /// # Example
     /// Initializes [FontCache] without system fonts.
     /// ```
-    ///     FontCache::init(false).expect("Cache error");
+    /// FontCache::init(false).expect("Cache error");
     /// ```
     pub fn init(include_system_fonts: bool) -> WrapperResult<()> {
         let mut font_cache_mutex = FONT_CACHE.lock();
@@ -573,35 +576,38 @@ impl FontCache {
     }
 
     /// Loads all operating system fonts, custom fonts and initializes
-    /// [global font cache](FONT_CACHE). \
+    /// [global font cache](FontCache).
     /// This will initialize the font cache with provided fonts which are lazily loaded on-demand.
     ///
-    /// You can choose to include all system fonts during the font search. If you have \
-    /// a custom font directory or directories you can also pass them as a [Vec] of \
-    /// anything cloneable that can be converted to [PathBuf]. This function will \
+    /// You can choose to include all system fonts during the font search. If you have
+    /// a custom font directory or directories you can also pass them as a [Vec] of
+    /// anything cloneable that can be converted to [PathBuf]. This function will
     /// automatically **overwrite** current global font cache.
     ///
     /// - `include_system_fonts` - Notes if all system fonts should be loaded.
-    /// - `dir_paths` - [Vec] of anything clonable that can be converted into \
+    /// - `dir_paths` - [Vec] of anything clonable that can be converted into
     /// [PathBuf] pointing to directories containing fonts.
     ///
     /// # Note / Warning
-    /// ### Blocking [Mutex]
-    /// Any operation on the [FontCache] will lock the [Mutex]. This mutex is **NOT ASYNC** \
-    /// so keep that in mind. Use **'blocking task'** provided by your runtime \
+    /// ### Blocking Mutex
+    /// Any operation on the [FontCache] will lock the Mutex. This mutex is **NOT ASYNC**
+    /// so keep that in mind. Use **'blocking task'** provided by your runtime
     /// if you wish to use it in an async environment.
     ///
     /// # Example
     /// Initializes [FontCache] without system fonts including custom fonts directories.
     /// ```
-    ///     let font_dirs = vec![
-    ///         "./assets/fonts",
-    ///         "~/path/to/custom/fonts"
-    ///     ];
-    ///     FontCache::init_with_dirs(false, font_dirs)
-    ///         .expect("Cache error");
+    /// let font_dirs = vec![
+    ///     "./assets/fonts",
+    ///     "~/path/to/custom/fonts"
+    /// ];
+    /// FontCache::init_with_dirs(false, font_dirs)
+    ///     .expect("Cache error");
     /// ```
-    pub fn init_with_dirs(include_system_fonts: bool, dir_paths: Vec<impl Into<PathBuf>>) -> WrapperResult<()> {
+    pub fn init_with_dirs(
+        include_system_fonts: bool,
+        dir_paths: Vec<impl Into<PathBuf>>
+    ) -> WrapperResult<()> {
         let mut font_cache_mutex = FONT_CACHE.lock();
 
         let mapped: Vec<PathBuf> = dir_paths

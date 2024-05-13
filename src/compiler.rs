@@ -1,4 +1,4 @@
-//! Provides a way to compile typst [Document] to PDF, PNG or SVG.
+//! Provides a way to compile typst Document to PDF, PNG or SVG.
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -20,31 +20,32 @@ use crate::files::LazyFile;
 use crate::fonts::{LazyFont, FontCache};
 use crate::parameters::CompilerOutput;
 
-/// [Compiler] instance build from [CompilerBuilder](crate::builder::CompilerBuilder). \
-/// Compiles [Document] to PDF, PNG or SVG by using `compile_` methods.
+/// [Compiler] instance build from [CompilerBuilder](crate::builder::CompilerBuilder).
+///
+/// Compiles Document to PDF, PNG or SVG by using `compile_` methods.
 ///
 /// # Note
 /// Please read all [CompilerBuilder](crate::builder::CompilerBuilder) warnings, also read
 /// `compile_` methods warnings.
 ///
 /// # Example
-/// Compiles [Document] to PDF file and saves the result.
+/// Compiles Document to PDF file and saves the result.
 /// ```
-///     let entry = "main.typ";
-///     let root = "./project";
+/// let entry = "main.typ";
+/// let root = "./project";
 ///
-///     // Build the compiler and compile to PDF.
-///     let compiler = CompilerBuilder::with_file_input(entry, root)
-///         .build()
-///         .expect("Couldn't build the compiler");
-///     let compiled = compiler.compile_pdf();
+/// // Build the compiler and compile to PDF.
+/// let compiler = CompilerBuilder::with_file_input(entry, root)
+///     .build()
+///     .expect("Couldn't build the compiler");
+/// let compiled = compiler.compile_pdf();
 ///
-///     if let Some(pdf) = compiled.output {
-///         std::fs::write("./main.pdf", pdf)
-///             .expect("Couldn't write PDF"); // Writes PDF file.
-///     } else {
-///         dbg!(compiled.errors); // Compilation failed, show errors.
-///     }
+/// if let Some(pdf) = compiled.output {
+///     std::fs::write("./main.pdf", pdf)
+///         .expect("Couldn't write PDF"); // Writes PDF file.
+/// } else {
+///     dbg!(compiled.errors); // Compilation failed, show errors.
+/// }
 /// ```
 #[derive(Debug)]
 pub struct Compiler {
@@ -131,7 +132,8 @@ impl Compiler {
         f(map.entry(id).or_insert_with(|| LazyFile::new(id)))
     }
 
-    /// Converts [chrono::Datelike] to [typst::foundations::Datetime]. \
+    /// Converts [chrono::Datelike] to [typst::foundations::Datetime].
+    ///
     /// Ignores time, uses just date. If the conversion fails, returns `None`.
     ///
     /// ### Used internally.
@@ -143,7 +145,8 @@ impl Compiler {
         )
     }
 
-    /// Converts [chrono::Datelike] and [chrono::Timelike] to [typst::foundations::Datetime]. \
+    /// Converts [chrono::Datelike] and [chrono::Timelike] to [typst::foundations::Datetime].
+    ///
     /// Uses both date and time. If the conversion fails, returns `None`.
     ///
     /// ### Used internally.
@@ -158,17 +161,18 @@ impl Compiler {
         )
     }
 
-    /// Compiles and consumes `self` into a typst document. \
-    /// Function returns a tuple with optional [Document] and [SourceDiagnostic] [EcoVec].
+    /// Compiles and consumes `self` into a typst document.
     ///
-    /// Returns [Document] [CompilerOutput]. \
-    /// If there's an error during compilation it will return `None` variant for `output`, also \
-    /// the `errors` vector will be populated. Even if the compilation is successfull the \
+    /// Function returns a tuple with optional Document and [SourceDiagnostic] [EcoVec].
+    ///
+    /// Returns Document [CompilerOutput]. \
+    /// If there's an error during compilation it will return `None` variant for `output`, also
+    /// the `errors` vector will be populated. Even if the compilation is successfull the
     /// warnings can still occur.
     ///
     /// # Note / Warning
-    /// This will lock the [FontCache](crate::fonts::FontCache) [Mutex] and update it with lazily \
-    /// loaded fonts. This mutex is **NOT ASYNC** so keep that in mind. \
+    /// This will lock the [FontCache](crate::fonts::FontCache) Mutex and update it with lazily
+    /// loaded fonts. This mutex is **NOT ASYNC** so keep that in mind.
     /// Please use **'blocking task'** provided by your async runtime.
     ///
     /// ### Used internally.
@@ -194,32 +198,33 @@ impl Compiler {
         };
     }
 
-    /// Compiles typst [Document] into PDF bytes and consumes `self`. \
+    /// Compiles typst Document into PDF bytes and consumes `self`.
+    ///
     /// Returns [Vec\<u8\>](Vec) [CompilerOutput].
     ///
     /// # Note / Warning
-    /// This will lock the [FontCache](crate::fonts::FontCache) [Mutex] and update it with lazily \
-    /// loaded fonts. This mutex is **NOT ASYNC** so keep that in mind. \
+    /// This will lock the [FontCache](crate::fonts::FontCache) Mutex and update it with lazily
+    /// loaded fonts. This mutex is **NOT ASYNC** so keep that in mind.
     /// Please use **'blocking task'** provided by your async runtime.
     ///
     /// # Example
-    /// Compiles [Document] to PDF file and saves the result.
+    /// Compiles Document to PDF file and saves the result.
     /// ```
-    ///     let entry = "main.typ";
-    ///     let root = "./project";
+    /// let entry = "main.typ";
+    /// let root = "./project";
     ///
-    ///     // Build the compiler and compile to PDF.
-    ///     let compiler = CompilerBuilder::with_file_input(entry, root)
-    ///         .build()
-    ///         .expect("Couldn't build the compiler");
-    ///     let compiled = compiler.compile_pdf();
+    /// // Build the compiler and compile to PDF.
+    /// let compiler = CompilerBuilder::with_file_input(entry, root)
+    ///     .build()
+    ///     .expect("Couldn't build the compiler");
+    /// let compiled = compiler.compile_pdf();
     ///
-    ///     if let Some(pdf) = compiled.output {
-    ///         std::fs::write("./main.pdf", pdf)
-    ///             .expect("Couldn't write PDF"); // Writes PDF file.
-    ///     } else {
-    ///         dbg!(compiled.errors); // Compilation failed, show errors.
-    ///     }
+    /// if let Some(pdf) = compiled.output {
+    ///     std::fs::write("./main.pdf", pdf)
+    ///         .expect("Couldn't write PDF"); // Writes PDF file.
+    /// } else {
+    ///     dbg!(compiled.errors); // Compilation failed, show errors.
+    /// }
     /// ```
     pub fn compile_pdf(self) -> CompilerOutput<Vec<u8>> {
         let timestamp = Self::date_convert_ymd_hms(self.now);
@@ -246,40 +251,41 @@ impl Compiler {
         };
     }
 
-    /// Compiles typst [Document] into a collection of PNG bytes and consumes `self`. \
+    /// Compiles typst Document into a collection of PNG bytes and consumes `self`.
+    ///
     /// One item for each page. Returns [Vec\<Vec\<u8\>\>](Vec) [CompilerOutput].
     ///
     /// # Note / Warning
-    /// This will lock the [FontCache](crate::fonts::FontCache) [Mutex] and update it with lazily \
+    /// This will lock the [FontCache](crate::fonts::FontCache) Mutex and update it with lazily
     /// loaded fonts. This mutex is **NOT ASYNC** so keep that in mind.
     ///
-    /// When compiling to PNGs or SVGs, the compiler tries \
-    /// to encode/convert images to bytes in parallel. \
-    /// To sync up compiled pages, again it uses **SYNC** mutex. \
+    /// When compiling to PNGs or SVGs, the compiler tries
+    /// to encode/convert images to bytes in parallel.
+    /// To sync up compiled pages, again it uses **SYNC** mutex.
     /// Please use **'blocking task'** provided by your async runtime.
     ///
     /// # Example
-    /// Compiles [Document] to multiple PNGs and saves them all.
+    /// Compiles Document to multiple PNGs and saves them all.
     /// ```
-    ///     let entry = "main.typ";
-    ///     let root = "./project";
+    /// let entry = "main.typ";
+    /// let root = "./project";
     ///
-    ///     // Build the compiler and compile to PNG.
-    ///     let compiler = CompilerBuilder::with_file_input(entry, root)
-    ///         .build()
-    ///         .expect("Couldn't build the compiler");
-    ///     let compiled = compiler.compile_png();
+    /// // Build the compiler and compile to PNG.
+    /// let compiler = CompilerBuilder::with_file_input(entry, root)
+    ///     .build()
+    ///     .expect("Couldn't build the compiler");
+    /// let compiled = compiler.compile_png();
     ///
-    ///     if let Some(pages) = compiled.output {
-    ///         // Writes images one by one.
-    ///         pages.iter().enumerate().for_each(|(index, page)| {
-    ///             let filename = format!("./output/{index}.png");
-    ///             std::fs::write(filename, page)
-    ///                 .expect("Couldn't write PNG");
-    ///         });
-    ///     } else {
-    ///         dbg!(compiled.errors); // Compilation failed, show errors.
-    ///     }
+    /// if let Some(pages) = compiled.output {
+    ///     // Writes images one by one.
+    ///     pages.iter().enumerate().for_each(|(index, page)| {
+    ///         let filename = format!("./output/{index}.png");
+    ///         std::fs::write(filename, page)
+    ///             .expect("Couldn't write PNG");
+    ///     });
+    /// } else {
+    ///     dbg!(compiled.errors); // Compilation failed, show errors.
+    /// }
     /// ```
     pub fn compile_png(self) -> CompilerOutput<Vec<Vec<u8>>> {
         let ppi = self.ppi / 72.0;
@@ -351,40 +357,41 @@ impl Compiler {
         };
     }
 
-    /// Compiles typst [Document] into a collection of SVG bytes and consumes `self`. \
+    /// Compiles typst Document into a collection of SVG bytes and consumes `self`.
+    ///
     /// One item for each page. Returns [Vec\<Vec\<u8\>\>](Vec) [CompilerOutput].
     ///
     /// # Note / Warning
-    /// This will lock the [FontCache](crate::fonts::FontCache) [Mutex] and update it with lazily \
+    /// This will lock the [FontCache](crate::fonts::FontCache) Mutex and update it with lazily
     /// loaded fonts. This mutex is **NOT ASYNC** so keep that in mind.
     ///
-    /// When compiling to PNGs or SVGs, the compiler tries \
-    /// to encode/convert images to bytes in parallel. \
-    /// To sync up compiled pages, again it uses **SYNC** mutex. \
+    /// When compiling to PNGs or SVGs, the compiler tries
+    /// to encode/convert images to bytes in parallel.
+    /// To sync up compiled pages, again it uses **SYNC** mutex.
     /// Please use **'blocking task'** provided by your async runtime.
     ///
     /// # Example
-    /// Compiles [Document] to multiple SVGs and saves them all.
+    /// Compiles Document to multiple SVGs and saves them all.
     /// ```
-    ///     let entry = "main.typ";
-    ///     let root = "./project";
+    /// let entry = "main.typ";
+    /// let root = "./project";
     ///
-    ///     // Build the compiler and compile to SVG.
-    ///     let compiler = CompilerBuilder::with_file_input(entry, root)
-    ///         .build()
-    ///         .expect("Couldn't build the compiler");
-    ///     let compiled = compiler.compile_svg();
+    /// // Build the compiler and compile to SVG.
+    /// let compiler = CompilerBuilder::with_file_input(entry, root)
+    ///     .build()
+    ///     .expect("Couldn't build the compiler");
+    /// let compiled = compiler.compile_svg();
     ///
-    ///     if let Some(pages) = compiled.output {
-    ///         // Writes images one by one.
-    ///         pages.iter().enumerate().for_each(|(index, page)| {
-    ///             let filename = format!("./output/{index}.svg");
-    ///             std::fs::write(filename, page)
-    ///                 .expect("Couldn't write SVG");
-    ///         });
-    ///     } else {
-    ///         dbg!(compiled.errors); // Compilation failed, show errors.
-    ///     }
+    /// if let Some(pages) = compiled.output {
+    ///     // Writes images one by one.
+    ///     pages.iter().enumerate().for_each(|(index, page)| {
+    ///         let filename = format!("./output/{index}.svg");
+    ///         std::fs::write(filename, page)
+    ///             .expect("Couldn't write SVG");
+    ///     });
+    /// } else {
+    ///     dbg!(compiled.errors); // Compilation failed, show errors.
+    /// }
     /// ```
     pub fn compile_svg(self) -> CompilerOutput<Vec<Vec<u8>>> {
         let compiler_output: CompilerOutput<Document> = self.compile_document();
