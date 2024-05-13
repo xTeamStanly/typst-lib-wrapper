@@ -5,7 +5,7 @@
 //! **Note**: This library is intended for personal use. It will not be added to `crates.io`. \
 //! If you wish to use this:
 //! ```toml
-//! typst_lib_wrapper = { git = "https://github.com/xTeamStanly/typst-lib-wrapper.git" }
+//! typst-lib-wrapper = { git = "https://github.com/xTeamStanly/typst-lib-wrapper.git" }
 //! ```
 //!
 //! # Overview
