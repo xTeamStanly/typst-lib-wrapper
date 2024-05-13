@@ -23,7 +23,7 @@ pub(crate) struct LazyFont {
     /// The lazily loaded font.
     font: OnceLock<Option<Font>>,
     /// Used to indicate if the font it 'typst embedded font'.
-    embedded: bool,
+    embedded: bool
 }
 
 impl LazyFont {
@@ -166,36 +166,92 @@ impl FontCache {
         return Ok(());
     }
 
-    /// TODO
-    pub(crate) fn update_cache(font: Font) -> WrapperResult<()> {
+    /// Updates the cache if detects that there are new lazily loaded fonts.
+    ///
+    /// - `new_fonts`: After compilation maybe we loaded some [lazy fonts](LazyFont). \
+    /// If we did this [Vec] will contain them.
+    ///
+    /// # Note / Warning
+    /// This will lock the [FontCache](crate::fonts::FontCache) [Mutex] and update it with lazily \
+    /// loaded fonts. This mutex is **NOT ASYNC** so keep that in mind. \
+    /// Please use **'blocking task'** provided by your async runtime.
+    ///
+    /// ### Used internally.
+    pub(crate) fn update_cache(new_fonts: Vec<LazyFont>) -> WrapperResult<usize> {
         let mut font_cache_mutex = FONT_CACHE.lock();
         let font_cache: &mut FontCache = Self::get_mut_or_init(&mut font_cache_mutex)?;
 
-        let info = font.info();
+        // Counts all loaded fonts currently in cache.
+        let cache_loaded_fonts_count = font_cache.fonts
+            .iter()
+            .filter(|x| x.font.get().is_some())
+            .count();
 
-        // Search for the font if it exists in cache.
-        if let Some(buffer_index) = font_cache
-            .book
-            .select(&info.family.to_lowercase(), info.variant)
-        {
-            if let Some(old_font) = font_cache.fonts.get_mut(buffer_index) {
-                let old_font_optional = old_font.font.take();
-                match old_font_optional {
-                    None => {
-                        // println!("\x1b[1;33m CACHED: {:?} \x1b[0m", font.info());
-                        old_font.font.set(Some(font)).unwrap();
+        // Counts all potentially newly loaded fonts by some typst compilation.
+        let new_loaded_fonts_count = new_fonts
+            .iter()
+            .filter(|x| x.font.get().is_some())
+            .count();
+
+        // If there is not difference, don't update the cache.
+        // This skips the heavy operation of searching and updating new fonts.
+        if cache_loaded_fonts_count == new_loaded_fonts_count {
+            return Ok(0);
+        }
+
+        let mut updated: usize = 0;
+
+        // Iterate only over new 'loaded' fonts.
+        for mut new_font in new_fonts.into_iter().filter(|x| x.font.get().is_some()) {
+
+            // We know that this will always return `Some` variant.
+            // We could `filter_map` the vector, but we need the `LazyFont` (`new_font`).
+            if let Some(Some(font)) = new_font.font.take() {
+                let info = font.info();
+
+                // Search for the font metadata if it exists in the cache.
+                if let Some(cache_index) = font_cache
+                    .book
+                    .select(&info.family.to_lowercase(), info.variant)
+                {
+                    // Font metadata found in cache.
+
+                    // This should always return `Some` variant,
+                    // because we know have a valid 'cache_index'.
+                    if let Some(found) = font_cache.fonts.get_mut(cache_index) {
+
+                        // We need to replace the font data if it doesn't exists.
+                        // Otherwise, leave it alone (already cached);
+                        if found.font.get().is_none() {
+                            let _ = found.font.take(); // Discards value, just in case.
+                            if found.font.set(Some(font)).is_ok() {
+                                updated += 1; // Successfully updated the cache.
+                            }
+                        }
                     }
-                    Some(fff) => {
-                        old_font.font.set(fff).unwrap();
-                        // println!("\x1b[1;36m ALREADY CACHED: {:?} \x1b[0m", font.info());
-                    }
-                };
-                // println!("\x1b[1;33m CACHED: {:?} \x1b[0m", font.info());
-                // old_font.font.set(Some(font));
+
+                } else {
+                    // Font not found in cache.
+
+                    // The cache cleaning doesn't erase metadata, so this can happen
+                    // if the cache was reinitialized again with different configuration.
+                    // We can just add the missing font into cache again.
+
+                    // Clone the font info as late as possible, only if needed.
+                    let font_info = info.clone();
+
+                    // Return font back into 'LazyFont'.
+                    new_font.font = OnceLock::from(Some(font));
+                    // Push font info into font cache.
+                    font_cache.book.push(font_info);
+                    font_cache.fonts.push(new_font);
+
+                    updated += 1;
+                }
             }
         }
 
-        Ok(())
+        Ok(updated)
     }
 
     /// Acquires [global font cache](FONT_CACHE), **clones** [FontBook] and creates

@@ -17,7 +17,7 @@ use typst::visualize::Color;
 use typst_syntax::{FileId, Source, Span};
 
 use crate::files::LazyFile;
-use crate::fonts::LazyFont;
+use crate::fonts::{LazyFont, FontCache};
 use crate::parameters::CompilerOutput;
 
 /// [Compiler] instance build from [CompilerBuilder](crate::builder::CompilerBuilder). \
@@ -158,7 +158,7 @@ impl Compiler {
         )
     }
 
-    /// Compiles `self` into a typst document. \
+    /// Compiles and consumes `self` into a typst document. \
     /// Function returns a tuple with optional [Document] and [SourceDiagnostic] [EcoVec].
     ///
     /// Returns [Document] [CompilerOutput]. \
@@ -172,12 +172,13 @@ impl Compiler {
     /// Please use **'blocking task'** provided by your async runtime.
     ///
     /// ### Used internally.
-    fn compile_document(&self) -> CompilerOutput<Document> {
+    fn compile_document(self) -> CompilerOutput<Document> {
         let mut tracer = Tracer::new();
-        let compilation_result = typst::compile(self, &mut tracer);
+        let compilation_result = typst::compile(&self, &mut tracer);
         let warnings = tracer.warnings();
 
-        // TODO: UPDATE FONT CACHE and add warning to all methods using this one.
+        // Tries to update the font cache, ignores errors.
+        let _ = FontCache::update_cache(self.fonts);
 
         return match compilation_result {
             Ok(doc) => CompilerOutput {
@@ -193,7 +194,7 @@ impl Compiler {
         };
     }
 
-    /// Compiles typst [Document] into PDF bytes. \
+    /// Compiles typst [Document] into PDF bytes and consumes `self`. \
     /// Returns [Vec\<u8\>](Vec) [CompilerOutput].
     ///
     /// # Note / Warning
@@ -220,7 +221,9 @@ impl Compiler {
     ///         dbg!(compiled.errors); // Compilation failed, show errors.
     ///     }
     /// ```
-    pub fn compile_pdf(&self) -> CompilerOutput<Vec<u8>> {
+    pub fn compile_pdf(self) -> CompilerOutput<Vec<u8>> {
+        let timestamp = Self::date_convert_ymd_hms(self.now);
+
         let compiler_output: CompilerOutput<Document> = self.compile_document();
         let errors = compiler_output.errors;
         let warnings = compiler_output.warnings;
@@ -233,7 +236,7 @@ impl Compiler {
                 warnings
             }
         };
-        let timestamp = Self::date_convert_ymd_hms(self.now);
+
         let pdf_bytes = typst_pdf::pdf(&document, Smart::Auto, timestamp);
 
         return CompilerOutput {
@@ -243,12 +246,13 @@ impl Compiler {
         };
     }
 
-    /// Compiles typst [Document] into a collection of PNG bytes. One item for each page. \
-    /// Returns [Vec\<Vec\<u8\>\>](Vec) [CompilerOutput].
+    /// Compiles typst [Document] into a collection of PNG bytes and consumes `self`. \
+    /// One item for each page. Returns [Vec\<Vec\<u8\>\>](Vec) [CompilerOutput].
     ///
     /// # Note / Warning
     /// This will lock the [FontCache](crate::fonts::FontCache) [Mutex] and update it with lazily \
-    /// loaded fonts. This mutex is **NOT ASYNC** so keep that in mind. \
+    /// loaded fonts. This mutex is **NOT ASYNC** so keep that in mind.
+    ///
     /// When compiling to PNGs or SVGs, the compiler tries \
     /// to encode/convert images to bytes in parallel. \
     /// To sync up compiled pages, again it uses **SYNC** mutex. \
@@ -277,7 +281,10 @@ impl Compiler {
     ///         dbg!(compiled.errors); // Compilation failed, show errors.
     ///     }
     /// ```
-    pub fn compile_png(&self) -> CompilerOutput<Vec<Vec<u8>>> {
+    pub fn compile_png(self) -> CompilerOutput<Vec<Vec<u8>>> {
+        let ppi = self.ppi / 72.0;
+        let background = self.background;
+
         let compiler_output: CompilerOutput<Document> = self.compile_document();
         let errors = compiler_output.errors;
         let warnings = compiler_output.warnings;
@@ -306,7 +313,7 @@ impl Compiler {
             .enumerate()
             .map(|(page_index, page)| {
                 // Tries to encode page frame.
-                match typst_render::render(&page.frame, self.ppi / 72.0, self.background)
+                match typst_render::render(&page.frame, ppi / 72.0, background)
                     .encode_png()
                 {
                     Ok(buf) => { // Write encoded PNG to the shared buffer.
@@ -344,12 +351,13 @@ impl Compiler {
         };
     }
 
-    /// Compiles typst [Document] into a collection of SVG bytes. One item for each page. \
-    /// Returns [Vec\<Vec\<u8\>\>](Vec) [CompilerOutput].
+    /// Compiles typst [Document] into a collection of SVG bytes and consumes `self`. \
+    /// One item for each page. Returns [Vec\<Vec\<u8\>\>](Vec) [CompilerOutput].
     ///
     /// # Note / Warning
     /// This will lock the [FontCache](crate::fonts::FontCache) [Mutex] and update it with lazily \
-    /// loaded fonts. This mutex is **NOT ASYNC** so keep that in mind. \
+    /// loaded fonts. This mutex is **NOT ASYNC** so keep that in mind.
+    ///
     /// When compiling to PNGs or SVGs, the compiler tries \
     /// to encode/convert images to bytes in parallel. \
     /// To sync up compiled pages, again it uses **SYNC** mutex. \
@@ -378,7 +386,7 @@ impl Compiler {
     ///         dbg!(compiled.errors); // Compilation failed, show errors.
     ///     }
     /// ```
-    pub fn compile_svg(&self) -> CompilerOutput<Vec<Vec<u8>>> {
+    pub fn compile_svg(self) -> CompilerOutput<Vec<Vec<u8>>> {
         let compiler_output: CompilerOutput<Document> = self.compile_document();
         let errors = compiler_output.errors;
         let warnings = compiler_output.warnings;

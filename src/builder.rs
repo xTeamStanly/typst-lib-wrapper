@@ -9,12 +9,9 @@ use native_tls::Certificate;
 use parking_lot::Mutex;
 use typst::foundations::{Capturer, IntoValue};
 use typst::foundations::{Dict, Value};
-use typst::text::FontBook;
 use typst::visualize::Color;
 use typst::LibraryBuilder;
 use typst_syntax::{FileId, Source, VirtualPath};
-
-// use super::{Format, Input};
 
 use crate::compiler::Compiler;
 use crate::errors::{WrapperError, WrapperResult};
@@ -666,10 +663,12 @@ impl CompilerBuilder {
             }
         };
 
-        // TODO: LOAD FONTS + FONT CACHE THINGS
-        // let book = FontBook::new();
-        // let fonts = Vec::<LazyFont>::new();
-        let (book, fonts) = FontCache::get_book_and_fonts().unwrap();
+        // Skips adding fonts to the font cache if no custom paths provided.
+        if !self.font_paths.is_empty() {
+            FontCache::insert_many(self.font_paths)?;
+        }
+        // Gets all necessary font information.
+        let (book, fonts) = FontCache::get_book_and_fonts()?;
 
         Ok(Compiler {
             root: root_path,
