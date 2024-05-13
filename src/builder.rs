@@ -1,3 +1,5 @@
+//! Provides a way to build a typst [Compiler].
+
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::path::PathBuf;

@@ -1,5 +1,4 @@
-//! Contains some I/O parameters for the [Compiler]. \
-//! ### Exports [Input], [Format] and [Output].
+//! Contains some I/O parameters for the [crate::compiler::Compiler].
 
 use std::path::PathBuf;
 

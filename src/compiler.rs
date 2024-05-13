@@ -171,7 +171,7 @@ impl Compiler {
     /// loaded fonts. This mutex is **NOT ASYNC** so keep that in mind. \
     /// Please use **'blocking task'** provided by your async runtime.
     ///
-    /// ### Used internally
+    /// ### Used internally.
     fn compile_document(&self) -> CompilerOutput<Document> {
         let mut tracer = Tracer::new();
         let compilation_result = typst::compile(self, &mut tracer);
