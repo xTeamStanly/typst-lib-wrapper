@@ -5,7 +5,6 @@ use std::path::PathBuf;
 
 use comemo::Prehashed;
 use parking_lot::Mutex;
-use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use ecow::EcoVec;
 use typst::diag::{FileResult, SourceDiagnostic};
 use typst::eval::Tracer;
@@ -175,6 +174,11 @@ impl Compiler {
     /// loaded fonts. This mutex is **NOT ASYNC** so keep that in mind.
     /// Please use **'blocking task'** provided by your async runtime.
     ///
+    /// If compiling with an opt-in feature (`"parallel_compilation"`) to PNGs or SVGs,
+    /// the compiler tries to encode/convert images to bytes in parallel with `rayon`.
+    /// To sync up compiled pages, again it uses **SYNC** mutex. \
+    /// [On mixing `rayon` with `tokio`!](https://blog.dureuill.net/articles/dont-mix-rayon-tokio/)
+    ///
     /// ### Used internally.
     fn compile_document(self) -> CompilerOutput<Document> {
         let mut tracer = Tracer::new();
@@ -259,10 +263,10 @@ impl Compiler {
     /// This will lock the [FontCache](crate::fonts::FontCache) Mutex and update it with lazily
     /// loaded fonts. This mutex is **NOT ASYNC** so keep that in mind.
     ///
-    /// When compiling to PNGs or SVGs, the compiler tries
-    /// to encode/convert images to bytes in parallel.
-    /// To sync up compiled pages, again it uses **SYNC** mutex.
-    /// Please use **'blocking task'** provided by your async runtime.
+    /// If compiling with an opt-in feature (`"parallel_compilation"`) to PNGs or SVGs,
+    /// the compiler tries to encode/convert images to bytes in parallel with `rayon`.
+    /// To sync up compiled pages, again it uses **SYNC** mutex. \
+    /// [On mixing `rayon` with `tokio`!](https://blog.dureuill.net/articles/dont-mix-rayon-tokio/)
     ///
     /// # Example
     /// Compiles Document to multiple PNGs and saves them all.
@@ -304,55 +308,90 @@ impl Compiler {
             }
         };
 
-        // Gets number of pages in a document and allocates memory upfront.
-        // Because of parallel PNG encoding, the pages buffer needs to be inside a mutex.
-        // The same applies to errors.
-        let pages_count = document.pages.len();
-        let shared_pages_buffer: Mutex<Vec<Vec<u8>>> = Mutex::new(
-            vec![Vec::new(); pages_count]
-        );
-        let shared_errors: Mutex<EcoVec<SourceDiagnostic>> = Mutex::new(errors);
+        let final_pages: Vec<Vec<u8>>;
+        let final_errors: EcoVec<SourceDiagnostic>;
 
-        let _ = document
-            .pages
-            .par_iter() // Tries to encode pages to PNG in parallel.
-            .enumerate()
-            .map(|(page_index, page)| {
-                // Tries to encode page frame.
-                match typst_render::render(&page.frame, ppi / 72.0, background)
-                    .encode_png()
-                {
-                    Ok(buf) => { // Write encoded PNG to the shared buffer.
-                        {
-                            shared_pages_buffer.lock()[page_index] = buf;
-                        }
+        // Sync compilation of pages.
+        #[cfg(not(feature = "parallel_compilation"))]
+        {
+            // Gets number of pages in a document and allocates memory upfront.
+            let pages_count = document.pages.len();
+            let mut pages_buffer: Vec<Vec<u8>> = vec![Vec::new(); pages_count];
+            let mut pages_errors = errors;
+
+            for (page_index, page) in document.pages.into_iter().enumerate() {
+                match typst_render::render(&page.frame, ppi, background).encode_png() {
+                    Ok(buf) => { // Write encoded PNG to the buffer.
+                        pages_buffer[page_index] = buf;
                     },
-                    Err(err) => { // Write error to the shared errors list.
+                    Err(err) => { // Write error to the errors list.
                         let encoding_error = SourceDiagnostic::error(
                             Span::detached(), err.to_string()
                         );
-
-                        {
-                            shared_errors.lock().push(encoding_error);
-                        }
+                        pages_errors.push(encoding_error);
                     }
-                };
+                }
+            }
+
+            final_pages = pages_buffer;
+            final_errors = pages_errors;
+        }
+
+        // Parallel compilation of pages.
+        #[cfg(feature = "parallel_compilation")]
+        {
+            use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
+
+            // Gets number of pages in a document and allocates memory upfront.
+            // Because of parallel PNG encoding, the pages buffer needs to be inside a mutex.
+            // The same applies to errors.
+            let pages_count = document.pages.len();
+            let shared_pages_buffer: Mutex<Vec<Vec<u8>>> = Mutex::new(
+                vec![Vec::new(); pages_count]
+            );
+            let shared_errors: Mutex<EcoVec<SourceDiagnostic>> = Mutex::new(errors);
+
+            let _ = document
+                .pages
+                .par_iter() // Tries to encode pages to PNG in parallel.
+                .enumerate()
+                .map(|(page_index, page)| {
+                    // Tries to encode page frame.
+                    match typst_render::render(&page.frame, ppi, background).encode_png() {
+                        Ok(buf) => { // Write encoded PNG to the shared buffer.
+                            {
+                                shared_pages_buffer.lock()[page_index] = buf;
+                            }
+                        },
+                        Err(err) => { // Write error to the shared errors list.
+                            let encoding_error = SourceDiagnostic::error(
+                                Span::detached(), err.to_string()
+                            );
+
+                            {
+                                shared_errors.lock().push(encoding_error);
+                            }
+                        }
+                    };
             }).collect::<Vec<()>>();
 
+            // Takes pages and errors from the mutex
+            final_pages = shared_pages_buffer.into_inner();
+            final_errors = shared_errors.into_inner();
+        }
 
-        // Gets pages from the mutex and checks if any `page vector` is empty, which indicates
+        // Checks if any `page vector` is empty, which indicates
         // encoding error occured. Discards all pages if any encoutered an error.
-        let pages = shared_pages_buffer.into_inner(); // Takes pages from the mutex.
-        let encoding_error_occured = pages.iter().any(|x| x.is_empty());
+        let encoding_error_occured = final_pages.iter().any(|x| x.is_empty());
         let output: Option<Vec<Vec<u8>>> = if encoding_error_occured {
             None
         } else {
-            Some(pages)
+            Some(final_pages)
         };
 
         return CompilerOutput {
             output,
-            errors: shared_errors.into_inner(), // Takes errors from the mutex.
+            errors: final_errors,
             warnings
         };
     }
@@ -365,10 +404,10 @@ impl Compiler {
     /// This will lock the [FontCache](crate::fonts::FontCache) Mutex and update it with lazily
     /// loaded fonts. This mutex is **NOT ASYNC** so keep that in mind.
     ///
-    /// When compiling to PNGs or SVGs, the compiler tries
-    /// to encode/convert images to bytes in parallel.
-    /// To sync up compiled pages, again it uses **SYNC** mutex.
-    /// Please use **'blocking task'** provided by your async runtime.
+    /// If compiling with an opt-in feature (`"parallel_compilation"`) to PNGs or SVGs,
+    /// the compiler tries to encode/convert images to bytes in parallel with `rayon`.
+    /// To sync up compiled pages, again it uses **SYNC** mutex. \
+    /// [On mixing `rayon` with `tokio`!](https://blog.dureuill.net/articles/dont-mix-rayon-tokio/)
     ///
     /// # Example
     /// Compiles Document to multiple SVGs and saves them all.
@@ -407,41 +446,69 @@ impl Compiler {
             }
         };
 
-        // Gets number of pages in a document and allocates memory upfront.
-        // Because of parallel SVG compiling, the pages buffer needs to be inside a mutex.
-        // The same applies to errors.
-        let pages_count = document.pages.len();
-        let shared_pages_buffer: Mutex<Vec<Vec<u8>>> = Mutex::new(
-            vec![Vec::new(); pages_count]
-        );
-        let shared_errors: Mutex<EcoVec<SourceDiagnostic>> = Mutex::new(errors);
+        let final_pages: Vec<Vec<u8>>;
+        let final_errors: EcoVec<SourceDiagnostic>;
 
-        let _ = document
-            .pages
-            .par_iter() // Tries to compile pages to SVG in parallel.
-            .enumerate()
-            .map(|(page_index, page)| {
-                // Write SVG to the shared buffer.
+        // Sync compilation of pages.
+        #[cfg(not(feature = "parallel_compilation"))]
+        {
+            // Gets number of pages in a document and allocates memory upfront.
+            let pages_count = document.pages.len();
+            let mut pages_buffer: Vec<Vec<u8>> = vec![Vec::new(); pages_count];
+            let pages_errors = errors;
+
+            for (page_index, page) in document.pages.into_iter().enumerate() {
                 let buf = typst_svg::svg(&page.frame).into_bytes();
-                {
-                    shared_pages_buffer.lock()[page_index] = buf;
-                }
+                pages_buffer[page_index] = buf;
+            }
+
+            final_pages = pages_buffer;
+            final_errors = pages_errors;
+        }
+
+        // Parallel compilation of pages.
+        #[cfg(feature = "parallel_compilation")]
+        {
+            use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
+
+            // Gets number of pages in a document and allocates memory upfront.
+            // Because of parallel SVG encoding, the pages buffer needs to be inside a mutex.
+            // The same applies to errors.
+            let pages_count = document.pages.len();
+            let shared_pages_buffer: Mutex<Vec<Vec<u8>>> = Mutex::new(
+                vec![Vec::new(); pages_count]
+            );
+            let shared_errors: Mutex<EcoVec<SourceDiagnostic>> = Mutex::new(errors);
+
+            let _ = document
+                .pages
+                .par_iter() // Tries to encode pages to SVG in parallel.
+                .enumerate()
+                .map(|(page_index, page)| {
+                    // Write SVG to the shared buffer.
+                    let buf = typst_svg::svg(&page.frame).into_bytes();
+                    {
+                        shared_pages_buffer.lock()[page_index] = buf;
+                    }
             }).collect::<Vec<()>>();
 
+            // Takes pages and errors from the mutex
+            final_pages = shared_pages_buffer.into_inner();
+            final_errors = shared_errors.into_inner();
+        }
 
-        // Gets pages from the mutex and checks if any `page vector` is empty, which indicates
-        // encoding error occured. Discards all pages if any encoutered an error.
-        let pages = shared_pages_buffer.into_inner(); // Takes pages from the mutex.
-        let encoding_error_occured = pages.iter().any(|x| x.is_empty());
+        // Checks if any `page vector` is empty, which indicates
+        // that error occured. Discards all pages if any encoutered an error.
+        let encoding_error_occured = final_pages.iter().any(|x| x.is_empty());
         let output: Option<Vec<Vec<u8>>> = if encoding_error_occured {
             None
         } else {
-            Some(pages)
+            Some(final_pages)
         };
 
         return CompilerOutput {
             output,
-            errors: shared_errors.into_inner(), // Takes errors from the mutex.
+            errors: final_errors,
             warnings
         };
     }

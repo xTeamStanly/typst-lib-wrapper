@@ -5,7 +5,6 @@ use std::sync::OnceLock;
 
 use fontdb::{Database, Source as FontSource};
 use parking_lot::{const_mutex, Mutex};
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use typst::foundations::Bytes;
 use typst::text::{Font, FontBook, FontInfo};
 
@@ -105,6 +104,10 @@ impl FontCache {
     /// so keep that in mind. Use **'blocking task'** provided by your runtime
     /// if you wish to use it in an async environment.
     ///
+    /// If compiling with an opt-in feature (`"parallel_compilation"`) cache size is calculated
+    /// in parallel with `rayon`. \
+    /// [On mixing `rayon` with `tokio`!](https://blog.dureuill.net/articles/dont-mix-rayon-tokio/)
+    ///
     /// # Example
     /// Clears cache if fonts take more then 64MB, excluding embedded fonts.
     /// ```
@@ -117,16 +120,41 @@ impl FontCache {
         let mut font_cache_mutex = FONT_CACHE.lock();
         let font_cache: &mut FontCache = Self::get_mut_or_init(&mut font_cache_mutex)?;
 
-        let cached_font_bytes: usize = font_cache.fonts
-            .par_iter()
-            .filter(|x| x.embedded == include_embedded_fonts)
-            .map(|x| {
-                if let Some(Some(font)) = x.font.get() {
-                    font.data().len()
-                } else {
-                    0
-                }
-        }).sum();
+        let cached_font_bytes: usize;
+
+        #[cfg(not(feature = "parallel_compilation"))]
+        {
+            let bytes_sum: usize = font_cache.fonts
+                .iter()
+                .filter(|x| x.embedded == include_embedded_fonts)
+                .map(|x| {
+                    if let Some(Some(font)) = x.font.get() {
+                        font.data().len()
+                    } else {
+                        0
+                    }
+            }).sum();
+
+            cached_font_bytes = bytes_sum;
+        }
+
+        #[cfg(feature = "parallel_compilation")]
+        {
+            use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+
+            let bytes_sum: usize = font_cache.fonts
+                .par_iter()
+                .filter(|x| x.embedded == include_embedded_fonts)
+                .map(|x| {
+                    if let Some(Some(font)) = x.font.get() {
+                        font.data().len()
+                    } else {
+                        0
+                    }
+            }).sum();
+
+            cached_font_bytes = bytes_sum;
+        }
 
         return Ok(cached_font_bytes);
     }

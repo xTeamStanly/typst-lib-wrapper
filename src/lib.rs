@@ -20,8 +20,8 @@
 //!     can be either **Content** (string) or **File** (entry filename and project root).
 //!
 //! -   🔃 **Custom data loading**:
-//!     Provides a way to override Typst standard library and add custom symbols to the global context.
-//!     This will overload **ANY** symbol, use it with caution. It is recommended that
+//!     Provides a way to override Typst standard library and add custom symbols to the global
+//!     context. This will overload **ANY** symbol, use it with caution. It is recommended that
 //!     **all custom data starts with underscore "_".** Another way to load custom data is
 //!     to use `sys.inputs` dictionary, but it's limited as it only allows strings as values.
 //!
@@ -30,8 +30,8 @@
 //!     actual font data is lazy loaded.
 //!
 //! -   🗃️ **Font caching**:
-//!     Global font cache keeps track of all fonts. The cache is updated if new fonts are loaded after
-//!     compilation.
+//!     Global font cache keeps track of all fonts. The cache is updated if new fonts are loaded
+//!     after compilation.
 //!
 //! -   📜 **Fully documented with examples**:
 //!     This library is fully documented and important functions are documented with examples.
@@ -163,18 +163,21 @@
 //! # Notes / Warnings
 //!
 //! -   ⌚ **Synchronous**:
-//!     Every mutex in this library is sync `parking_lot::Mutex`. Meaning, font caching and parallel
-//!     PNG/SVG compilation are **blocking**. Use **`blocking_task`** provided by your async runtime if
-//!     you with to compile documents in an async environment while interracting with this library.
+//!     Every mutex in this library is sync `parking_lot::Mutex`.
+//!     Meaning, font caching and (opt-in) parallel PNG/SVG compilation and cache size calculation
+//!     with `rayon` are both **blocking**. Use **`blocking_task`** provided by your async runtime
+//!     if you with to compile documents in an async environment while interracting
+//!     with this library. \
+//!     [On mixing `rayon` with `tokio`!](https://blog.dureuill.net/articles/dont-mix-rayon-tokio/)
 //!
 //! -   🔀 **Font cache cloning**:
-//!     Before building the compiler, builder locks the cache and **clones** it for itself. To reduce
-//!     cache size it is recommended to avoid loading all system fonts and to load only needed fonts.
-//!     In practise this won't be that big of a deal, because all fonts are lazily loaded on-demand.
-//!     But once loaded they stay in cache, so **manually emptying** is an option.
+//!     Before building the compiler, builder locks the cache and **clones** it for itself.
+//!     To reduce cache size it is recommended to avoid loading all system fonts and to load only
+//!     needed fonts. In practise this won't be that big of a deal, because all fonts are lazily
+//!     loaded on-demand. But once loaded they stay in cache, so **manually emptying** is an option.
 //!
-//! -   📥 **Automatic package downloads**: This library will automatically download packages from the
-//!     Typst package registry. This is also done by the [official CLI][typst-cli].
+//! -   📥 **Automatic package downloads**: This library will automatically download packages from
+//!     the Typst package registry. This is also done by the [official CLI][typst-cli].
 //!
 //! [typst-cli]: https://github.com/typst/typst/tree/main/crates/typst-cli
 

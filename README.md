@@ -159,9 +159,11 @@ There are more specific examples alongside every functions.
 # Notes / Warnings
 
 -   ⌚ **Synchronous**:
-    Every mutex in this library is sync `parking_lot::Mutex`. Meaning, font caching and parallel
-    PNG/SVG compilation are **blocking**. Use **`blocking_task`** provided by your async runtime if
-    you with to compile documents in an async environment while interracting with this library.
+    Every mutex in this library is sync `parking_lot::Mutex`.
+    Meaning, font caching and (opt-in) parallel PNG/SVG compilation and cache size calculation
+    with `rayon` are both **blocking**. Use **`blocking_task`** provided by your async runtime
+    if you with to compile documents in an async environment while interracting with this library. \
+    [On mixing `rayon` with `tokio`!](https://blog.dureuill.net/articles/dont-mix-rayon-tokio/)
 
 -   🔀 **Font cache cloning**:
     Before building the compiler, builder locks the cache and **clones** it for itself. To reduce

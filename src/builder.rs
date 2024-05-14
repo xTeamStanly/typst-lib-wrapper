@@ -43,9 +43,11 @@ use crate::parameters::Input;
 /// ### Blocking Mutex
 /// It is recommended to add fonts using [FontCache] to avoid locking the font mutex
 /// for too long. This mutex is **NOT ASYNC** so keep that in mind. Use **'blocking task'**
-/// if you wish to compile documents in an async environment. Also, when compiling to
-/// PNGs or SVGs, the compiler tries to encode/convert images to bytes in parallel.
-/// To sync up compiled pages, again it uses **SYNC** mutex.
+/// if you wish to compile documents in an async environment. Also, if compiling with an
+/// opt-in feature (`"parallel_compilation"`) to PNGs or SVGs, the compiler tries to
+/// encode/convert images to bytes in parallel with `rayon`. To sync up compiled pages,
+/// again it uses **SYNC** mutex. \
+/// [On mixing `rayon` with `tokio`!](https://blog.dureuill.net/articles/dont-mix-rayon-tokio/)
 ///
 /// ### [FontCache] cloning
 /// Before building the compiler, builder locks [FontCache] and **clones** it for itself.
@@ -590,9 +592,11 @@ impl CompilerBuilder {
     /// ### Blocking Mutex
     /// It is recommended to add fonts using [FontCache] to avoid locking the font mutex
     /// for too long. This mutex is **NOT ASYNC** so keep that in mind. Use **'blocking task'**
-    /// if you wish to compile documents in an async environment. Also, when compiling to
-    /// PNGs or SVGs, the compiler tries to encode/convert images to bytes in parallel.
-    /// To sync up compiled pages, again it uses **SYNC** mutex.
+    /// if you wish to compile documents in an async environment. Also, if compiling with an
+    /// opt-in feature (`"parallel_compilation"`) to PNGs or SVGs, the compiler tries to
+    /// encode/convert images to bytes in parallel with `rayon`. To sync up compiled pages,
+    /// again it uses **SYNC** mutex. \
+    /// [On mixing `rayon` with `tokio`!](https://blog.dureuill.net/articles/dont-mix-rayon-tokio/)
     ///
     /// ### [FontCache] cloning
     /// Before building the compiler, builder locks [FontCache] and **clones** it for itself.
