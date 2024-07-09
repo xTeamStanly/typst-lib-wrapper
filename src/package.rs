@@ -1,16 +1,11 @@
-//! Provides a way to [create a http agent](create_http_agent) with [certificate](Certificate) and
-//! to [download typst packages from the repository](prepare_package).
+//! Provides a way to [create a http agent](create_http_agent) and
+//! [download typst packages from the repository](prepare_package).
 //!
 //! ### Used internally.
 
-use std::sync::Arc;
 use std::path::{Path, PathBuf};
-
-use native_tls::{Certificate, TlsConnector};
 use typst::diag::{eco_format, PackageError, PackageResult};
 use typst_syntax::package::PackageSpec;
-
-use crate::errors::{WrapperError, WrapperResult};
 
 /// `typst-lib-wrapper` user agent, used when downloading a package.
 const USER_AGENT: &str = concat!("typst-lib-wrapper/", env!("CARGO_PKG_VERSION"));
@@ -18,34 +13,22 @@ const USER_AGENT: &str = concat!("typst-lib-wrapper/", env!("CARGO_PKG_VERSION")
 /// Typst package repository location.
 const HOST: &str = "https://packages.typst.org";
 
-/// Creates HTTP `ureq::Agent` with optional X509 [`Certificate`](Certificate).
+/// Creates HTTP `ureq::Agent`.
 pub(crate) fn create_http_agent(
-    certificate: Option<Certificate>
-) -> WrapperResult<ureq::Agent> {
+    agent: Option<ureq::Agent>
+) -> ureq::Agent {
+    // Returns provided agent.
+    if let Some(http_agent) = agent {
+        return http_agent;
+    } else {
+        // Creates new agent.
+        let mut builder = ureq::AgentBuilder::new();
 
-    let mut builder = ureq::AgentBuilder::new();
-    let mut tls = TlsConnector::builder();
+        // Set user agent.
+        builder = builder.user_agent(USER_AGENT);
 
-    // Set user agent.
-    builder = builder.user_agent(USER_AGENT);
-
-    // Apply a custom CA certificate if present.
-    if let Some(certificate) = certificate {
-        tls.add_root_certificate(certificate);
+        return builder.build();
     }
-
-    // Configure native TLS.
-    let connector = match tls.build() {
-        Ok(conn) => conn,
-        Err(err) => {
-            let io_err = std::io::Error::new(std::io::ErrorKind::Other, err);
-            let ureq_err = ureq::Error::from(io_err);
-            return Err(WrapperError::from(ureq_err));
-        }
-    };
-    builder = builder.tls_connector(Arc::new(connector));
-
-    return Ok(builder.build());
 }
 
 /// Tries to resolve package specification (`spec`) to [PathBuf].

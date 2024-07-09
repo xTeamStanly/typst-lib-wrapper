@@ -1,6 +1,6 @@
 [package]
 name = "typst-lib-wrapper"
-version = "0.1.1"
+version = "0.2.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -27,18 +27,17 @@ parallel_compilation = ["dep:rayon"]
 chrono = "0.4.38"
 comemo = "0.4.0"
 dirs = "5.0.1"
-ecow = "0.2"
+ecow = "0.2.2"
 flate2 = "1.0.30"
-fontdb = { version = "0.16.2", features = ["std", "fs", "fontconfig"] }
-native-tls = "0.2.11"
-parking_lot = { version = "0.12.3" }
+fontdb = { version = "0.20.0", features = ["std", "fs", "fontconfig"] }
+parking_lot = { version = "^0.12.0" }
 rayon = { version = "1.10.0", optional = true }
-tar = "0.4.40"
-thiserror = "1.0.59"
-typst = "0.11.0"
-typst-assets = { version = "0.11.0", features = ["fonts"] }
-typst-pdf = "0.11.0"
-typst-render = "0.11.0"
-typst-svg = "0.11.0"
-typst-syntax = "0.11.0"
-ureq = { version = "2.9.7", features = ["native-tls"] }
+tar = "0.4.41"
+thiserror = "1.0.61"
+typst = "0.11.1"
+typst-assets = { version = "0.11.1", features = ["fonts"] }
+typst-pdf = "0.11.1"
+typst-render = "0.11.1"
+typst-svg = "0.11.1"
+typst-syntax = "0.11.1"
+ureq = { version = "2.10.0" }

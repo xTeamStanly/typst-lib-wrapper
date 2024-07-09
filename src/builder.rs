@@ -5,7 +5,6 @@ use std::fmt::Debug;
 use std::path::PathBuf;
 
 use comemo::Prehashed;
-use native_tls::Certificate;
 use parking_lot::Mutex;
 use typst::foundations::{Capturer, IntoValue};
 use typst::foundations::{Dict, Value};
@@ -34,7 +33,7 @@ use crate::parameters::Input;
 /// - `font_paths`: If needed, additional font paths, will be inserted into [FontCache].
 /// - `ppi`: Pixels per inch when compiling to PNG, ignored otherwise.
 /// - `background`: Backgroud color when compiling to PNG, ignored otherwise.
-/// - `certificate`: X509 [Certificate] used when downloading packages from the repository.
+/// - `agent`: Overrides default [ureq::Agent] with provided one.
 ///
 ///  `add_` methods exists for `sys_inputs`, `custom_data` and `font_paths`. \
 /// They are used if you wish to add items one by one (extending vector) without rebuilding.
@@ -108,7 +107,7 @@ use crate::parameters::Input;
 ///     dbg!(compiled.errors); // Compilation failed, show errors.
 /// }
 /// ```
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct CompilerBuilder {
     /// Compilation [Input] (File or String).
     input: Input,
@@ -124,27 +123,8 @@ pub struct CompilerBuilder {
     ppi: Option<f32>,
     /// Optional PNG background [Color].
     background: Option<Color>,
-    /// Optional X509 [certificate](Certificate).
-    certificate: Option<Certificate>,
-}
-/// Custom [Debug] implementation, because [Certificate] doesn't implement [Debug].
-impl Debug for CompilerBuilder {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let certificate_fmt: &'static str = match &self.certificate {
-            Some(_) => "Some(...)",
-            None => "None",
-        };
-
-        f.debug_struct("CompilerBuilder")
-            .field("input", &self.input)
-            .field("sys_inputs", &self.sys_inputs)
-            .field("custom_data", &self.custom_data)
-            .field("font_paths", &self.font_paths)
-            .field("ppi", &self.ppi)
-            .field("background", &self.background)
-            .field("certificate", &certificate_fmt)
-            .finish()
-    }
+    /// Optional [ureq::Agent].
+    agent: Option<ureq::Agent>
 }
 
 impl CompilerBuilder {
@@ -169,7 +149,7 @@ impl CompilerBuilder {
             font_paths: Vec::new(),
             ppi: None,
             background: None,
-            certificate: None,
+            agent: None
         }
     }
 
@@ -557,17 +537,15 @@ impl CompilerBuilder {
         self
     }
 
-    /// X509 [certificate](Certificate).
+    /// Optional [ureq::Agent]
     ///
-    /// Used when building `ureq::Agent` for downloading packages from the repository.
+    /// Used for downloading packages from the repository. Primarily exists to enable loading
+    /// custom TLS configuration.
     ///
     /// # Example
-    /// How to load and parse the [Certificate].
+    /// How to create [ureq::Agent].
     /// ```
-    /// let bytes = std::fs::read("my_certificate.pem")
-    ///     .expect("Coudn't read the certificate");
-    /// let certificate = Certificate::from_pem(&bytes)
-    ///     .expect("Invalid certificate");
+    /// let agent = ureq::AgentBuilder::new().build();
     ///
     /// let content = r##"
     ///     #set page(paper: "a4");
@@ -576,12 +554,12 @@ impl CompilerBuilder {
     /// "##;
     ///
     /// let compiler = CompilerBuilder::with_content_input(content)
-    ///     .with_certificate(certificate)
+    ///     .with_agent(agent)
     ///     .build()
     ///     .expect("Couldn't build the compiler");
     /// ```
-    pub fn with_certificate(mut self, certificate: Certificate) -> Self {
-        self.certificate = Some(certificate);
+    pub fn with_agent(mut self, agent: ureq::Agent) -> Self {
+        self.agent = Some(agent);
         self
     }
 
@@ -607,7 +585,7 @@ impl CompilerBuilder {
     ///
     /// **⚠ You have been warned ⚠**
     pub fn build(self) -> WrapperResult<Compiler> {
-        let http_client = create_http_agent(self.certificate)?;
+        let http_client = create_http_agent(self.agent);
 
         let now = chrono::Utc::now();
         let ppi: f32 = self.ppi.unwrap_or(144.0); // default typst ppi: 144.0

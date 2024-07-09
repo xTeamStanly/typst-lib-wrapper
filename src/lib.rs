@@ -190,12 +190,10 @@ mod fonts;
 mod package;
 mod parameters;
 
-/// Necessary re-exports for completeness. Typst errors, values, types, tls certificate, ...
+/// Necessary re-exports for completeness. Typst errors, values, types, ...
 ///
 /// Almost everything you need to interract with the `typst` crate.
 pub mod reexports {
-    pub use native_tls::Certificate;
-
     pub use ureq::Error as UreqError;
 
     pub use ecow::{EcoString, EcoVec};
@@ -208,7 +206,7 @@ pub mod reexports {
     pub use typst::foundations::{
         Arg, Args, Array, Bytes, Content, Datetime, Dict, Duration, Dynamic, Func, IndexMap,
         IntoValue, Label, Module, NativeTypeData, Plugin, Str, Style, Styles, Type, Value, Version,
-        Element, NativeElement, NativeElementData
+        Element, NativeElement, NativeElementData, array, eco_vec
     };
 
     pub use typst::visualize::{
