@@ -3,16 +3,16 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use comemo::Prehashed;
 use parking_lot::Mutex;
 use ecow::EcoVec;
-use typst::diag::{FileResult, SourceDiagnostic};
-use typst::eval::Tracer;
+use typst::diag::{FileResult, SourceDiagnostic, Warned};
+use typst_pdf::{PdfOptions, PdfStandard, PdfStandards};
 use typst::foundations::{Bytes, Datetime, Smart};
 use typst::model::Document;
 use typst::text::{Font, FontBook};
 use typst::{Library, World};
-use typst::visualize::Color;
+use typst::visualize::{Color, Paint};
+use typst_utils::LazyHash;
 use typst_syntax::{FileId, Source, Span};
 
 use crate::files::LazyFile;
@@ -51,9 +51,10 @@ pub struct Compiler {
     pub(crate) root: PathBuf,
     pub(crate) entry: Source,
     pub(crate) files: Mutex<HashMap<FileId, LazyFile>>,
+    pub(crate) pdf_a: bool,
 
-    pub(crate) library: Prehashed<Library>,
-    pub(crate) book: Prehashed<FontBook>,
+    pub(crate) library: LazyHash<Library>,
+    pub(crate) book: LazyHash<FontBook>,
     pub(crate) fonts: Vec<LazyFont>,
 
     pub(crate) http_client: ureq::Agent,
@@ -71,22 +72,32 @@ impl World for Compiler {
     /// The standard library.
     ///
     /// Can be created through `Library::build()`.
-    fn library(&self) -> &Prehashed<Library> {
+    fn library(&self) -> &LazyHash<Library> {
         &self.library
     }
 
     /// Metadata about all known fonts.
-    fn book(&self) -> &Prehashed<FontBook> {
+    fn book(&self) -> &LazyHash<FontBook> {
         &self.book
     }
 
     /// Access the main source file.
-    fn main(&self) -> Source {
-        self.entry.clone()
+    fn main(&self) -> FileId {
+        self.entry.id()
     }
 
-    /// Try to access the specified source file.
+    /// Try to access the specified source file. If the [FileId] points to a "file" with in memory
+    /// contents, the contents are retrieved immediately. This is the case for the
+    /// [Input::Content](crate::Input::Content).
     fn source(&self, id: FileId) -> FileResult<Source> {
+        let in_memory_file = id
+            .vpath()
+            .as_rootless_path()
+            .to_str()
+            .map(|x| x.contains(crate::RESERVED_IN_MEMORY_IDENTIFIER))
+            .unwrap_or(false);
+        if in_memory_file { return Ok(self.entry.clone()); }
+
         self.slot(id, |slot| slot.source(&self.root, &self.http_client))
     }
 
@@ -181,9 +192,8 @@ impl Compiler {
     ///
     /// ### Used internally.
     fn compile_document(self) -> CompilerOutput<Document> {
-        let mut tracer = Tracer::new();
-        let compilation_result = typst::compile(&self, &mut tracer);
-        let warnings = tracer.warnings();
+        let Warned { output, warnings } = typst::compile(&self);
+        let compilation_result = output;
 
         // Tries to update the font cache, ignores errors.
         let _ = FontCache::update_cache(self.fonts);
@@ -232,9 +242,10 @@ impl Compiler {
     /// ```
     pub fn compile_pdf(self) -> CompilerOutput<Vec<u8>> {
         let timestamp = Self::date_convert_ymd_hms(self.now);
+        let pdf_a: bool = self.pdf_a;
 
         let compiler_output: CompilerOutput<Document> = self.compile_document();
-        let errors = compiler_output.errors;
+        let mut errors = compiler_output.errors;
         let warnings = compiler_output.warnings;
 
         let document: Document = match compiler_output.output {
@@ -246,10 +257,50 @@ impl Compiler {
             }
         };
 
-        let pdf_bytes = typst_pdf::pdf(&document, Smart::Auto, timestamp);
+        // IMPORTANT NOTE: PdfStandards::new(...) should never panic, but we will handle it just in case.
+        // https://github.com/typst/typst/blob/7add9b459a3ca54fca085e71f3dd4e611941c4cc/crates/typst-pdf/src/lib.rs#L114
+        let pdf_standards = if pdf_a {
+            match PdfStandards::new(&[PdfStandard::A_2b]) {
+                Ok(pdf_stndr) => pdf_stndr,
+                Err(err) => {
+                    errors.push(SourceDiagnostic::error(Span::detached(), err));
+                    return CompilerOutput {
+                        output: None,
+                        errors,
+                        warnings
+                    }
+                }
+            }
+        } else {
+            match PdfStandards::new(&[PdfStandard::V_1_7]) {
+                Ok(pdf_stndr) => pdf_stndr,
+                Err(err) => {
+                    errors.push(SourceDiagnostic::error(Span::detached(), err));
+                    return CompilerOutput {
+                        output: None,
+                        errors,
+                        warnings
+                    }
+                }
+            }
+        };
+
+        let pdf_options = PdfOptions {
+            ident: Smart::Auto,
+            timestamp,
+            standards: pdf_standards,
+            page_ranges: None // `None` exports all pages.
+        };
+
+        let mut pdf_bytes: Option<Vec<u8>> = None;
+
+        match typst_pdf::pdf(&document, &pdf_options) {
+            Ok(bytes) => { pdf_bytes = Some(bytes); },
+            Err(err_vec) => { errors.extend(err_vec); }
+        };
 
         return CompilerOutput {
-            output: Some(pdf_bytes),
+            output: pdf_bytes,
             errors,
             warnings
         };
@@ -294,6 +345,7 @@ impl Compiler {
     pub fn compile_png(self) -> CompilerOutput<Vec<Vec<u8>>> {
         let ppi = self.ppi / 72.0;
         let background = self.background;
+        let page_background = Smart::Custom(Some(Paint::Solid(background)));
 
         let compiler_output: CompilerOutput<Document> = self.compile_document();
         let errors = compiler_output.errors;
@@ -319,8 +371,10 @@ impl Compiler {
             let mut pages_buffer: Vec<Vec<u8>> = vec![Vec::new(); pages_count];
             let mut pages_errors = errors;
 
-            for (page_index, page) in document.pages.into_iter().enumerate() {
-                match typst_render::render(&page.frame, ppi, background).encode_png() {
+            for (page_index, mut page) in document.pages.into_iter().enumerate() {
+                page.fill = page_background.clone();
+
+                match typst_render::render(&page, ppi).encode_png() {
                     Ok(buf) => { // Write encoded PNG to the buffer.
                         pages_buffer[page_index] = buf;
                     },
@@ -340,7 +394,7 @@ impl Compiler {
         // Parallel compilation of pages.
         #[cfg(feature = "parallel_compilation")]
         {
-            use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
+            use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 
             // Gets number of pages in a document and allocates memory upfront.
             // Because of parallel PNG encoding, the pages buffer needs to be inside a mutex.
@@ -353,11 +407,13 @@ impl Compiler {
 
             let _ = document
                 .pages
-                .par_iter() // Tries to encode pages to PNG in parallel.
+                .into_par_iter() // Tries to encode pages to PNG in parallel.
                 .enumerate()
-                .map(|(page_index, page)| {
+                .map(|(page_index, mut page)| {
+                    page.fill = page_background.clone();
+
                     // Tries to encode page frame.
-                    match typst_render::render(&page.frame, ppi, background).encode_png() {
+                    match typst_render::render(&page, ppi).encode_png() {
                         Ok(buf) => { // Write encoded PNG to the shared buffer.
                             {
                                 shared_pages_buffer.lock()[page_index] = buf;
@@ -433,6 +489,9 @@ impl Compiler {
     /// }
     /// ```
     pub fn compile_svg(self) -> CompilerOutput<Vec<Vec<u8>>> {
+        let background = self.background;
+        let page_background = Smart::Custom(Some(Paint::Solid(background)));
+
         let compiler_output: CompilerOutput<Document> = self.compile_document();
         let errors = compiler_output.errors;
         let warnings = compiler_output.warnings;
@@ -457,8 +516,9 @@ impl Compiler {
             let mut pages_buffer: Vec<Vec<u8>> = vec![Vec::new(); pages_count];
             let pages_errors = errors;
 
-            for (page_index, page) in document.pages.into_iter().enumerate() {
-                let buf = typst_svg::svg(&page.frame).into_bytes();
+            for (page_index, mut page) in document.pages.into_iter().enumerate() {
+                page.fill = page_background.clone();
+                let buf = typst_svg::svg(&page).into_bytes();
                 pages_buffer[page_index] = buf;
             }
 
@@ -469,7 +529,7 @@ impl Compiler {
         // Parallel compilation of pages.
         #[cfg(feature = "parallel_compilation")]
         {
-            use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
+            use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 
             // Gets number of pages in a document and allocates memory upfront.
             // Because of parallel SVG encoding, the pages buffer needs to be inside a mutex.
@@ -482,11 +542,13 @@ impl Compiler {
 
             let _ = document
                 .pages
-                .par_iter() // Tries to encode pages to SVG in parallel.
+                .into_par_iter() // Tries to encode pages to SVG in parallel.
                 .enumerate()
-                .map(|(page_index, page)| {
+                .map(|(page_index, mut page)| {
+                    page.fill = page_background.clone();
+
                     // Write SVG to the shared buffer.
-                    let buf = typst_svg::svg(&page.frame).into_bytes();
+                    let buf = typst_svg::svg(&page).into_bytes();
                     {
                         shared_pages_buffer.lock()[page_index] = buf;
                     }

@@ -59,6 +59,23 @@ pub enum Input {
 }
 
 impl Input {
+    /// Checks if the provided [Input] contains the reserved (forbidden) filename/path.
+    pub(crate) fn is_forbidden(&self) -> bool {
+        match self {
+            Self::Content(_) => false,
+            Self::File { entry, root } => {
+                if entry.contains(crate::RESERVED_IN_MEMORY_IDENTIFIER) {
+                    return true;
+                }
+
+                root
+                    .to_str()
+                    .map(|x| x.contains(crate::RESERVED_IN_MEMORY_IDENTIFIER))
+                    .unwrap_or(false)
+            }
+        }
+    }
+
     /// Creates [Input] variant [Input::Content] from anything convertable to [String].
     ///
     /// # Example

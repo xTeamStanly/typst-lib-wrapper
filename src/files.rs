@@ -50,7 +50,7 @@ impl<T: Clone> LazyCell<T> {
 
         // Read and hash the file.
         let result = load();
-        let fingerprint = typst::util::hash128(&result);
+        let fingerprint = typst_utils::hash128(&result);
 
         // If the file contents didn't change, yield the old processed data.
         if std::mem::replace(&mut self.fingerprint, fingerprint) == fingerprint {

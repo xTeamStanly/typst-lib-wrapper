@@ -158,6 +158,14 @@ There are more specific examples alongside every functions.
 
 # Notes / Warnings
 
+-   📁 **Filename restrictions**: Due to migration from typst 0.11 to 0.12, in order for this
+    library to function without major refactors, filenames/paths that contains text
+    **`"CUSTOM_SOURCE_CONTENT_INPUT_IN_MEMORY_FILE"` should not be used**. This specific name is
+    reserved, as it is used internally within this library, to denote that the compiler input
+    should not be retreived from the file, because it's content is directly available in memory
+    and should be passed to compiler (and then later read) as is. In very simple terms this string
+    is used to distinguish content input from file input.
+
 -   ⌚ **Synchronous**:
     Every mutex in this library is sync `parking_lot::Mutex`.
     Meaning, font caching and (opt-in) parallel PNG/SVG compilation and cache size calculation

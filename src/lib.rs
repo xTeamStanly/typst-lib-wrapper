@@ -1,4 +1,5 @@
 #![allow(clippy::needless_return)]
+#![allow(clippy::doc_lazy_continuation)]
 #![deny(missing_docs)]
 #![deny(unsafe_code)]
 
@@ -162,6 +163,14 @@
 //!
 //! # Notes / Warnings
 //!
+//! -   📁 **Filename restrictions**: Due to migration from typst 0.11 to 0.12, in order for this
+//!     library to function without major refactors, filenames/paths that contains text
+//!     **`"CUSTOM_SOURCE_CONTENT_INPUT_IN_MEMORY_FILE"` should not be used**. This specific name is
+//!     reserved, as it is used internally within this library, to denote that the compiler input
+//!     should not be retreived from the file, because it's content is directly available in memory
+//!     and should be passed to compiler (and then later read) as is. In very simple terms this
+//!     string is used to distinguish content input from file input.
+//!
 //! -   ⌚ **Synchronous**:
 //!     Every mutex in this library is sync `parking_lot::Mutex`.
 //!     Meaning, font caching and (opt-in) parallel PNG/SVG compilation and cache size calculation
@@ -181,6 +190,7 @@
 //!
 //! [typst-cli]: https://github.com/typst/typst/tree/main/crates/typst-cli
 
+pub(crate) const RESERVED_IN_MEMORY_IDENTIFIER: &str = "CUSTOM_SOURCE_CONTENT_INPUT_IN_MEMORY_FILE";
 
 mod builder;
 mod compiler;
@@ -199,10 +209,9 @@ pub mod reexports {
     pub use ecow::{EcoString, EcoVec};
 
     pub use typst::layout::{Abs, Angle, Em, Length, Ratio, Rel};
-    pub use typst::util::{PicoStr, Scalar, Static};
+    pub use typst_utils::{PicoStr, Scalar, Static};
 
     pub use typst::diag::{PackageError, FileError, SourceDiagnostic};
-    pub use typst::eval::Tracer;
     pub use typst::foundations::{
         Arg, Args, Array, Bytes, Content, Datetime, Dict, Duration, Dynamic, Func, IndexMap,
         IntoValue, Label, Module, NativeTypeData, Plugin, Str, Style, Styles, Type, Value, Version,

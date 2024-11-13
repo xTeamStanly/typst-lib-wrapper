@@ -4,13 +4,13 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use std::path::PathBuf;
 
-use comemo::Prehashed;
 use parking_lot::Mutex;
 use typst::foundations::{Capturer, IntoValue};
 use typst::foundations::{Dict, Value};
 use typst::visualize::Color;
 use typst::LibraryBuilder;
-use typst_syntax::{FileId, Source, VirtualPath};
+use typst_syntax::{FileId, Source, Span, VirtualPath};
+use typst_utils::LazyHash;
 
 use crate::compiler::Compiler;
 use crate::errors::{WrapperError, WrapperResult};
@@ -54,6 +54,11 @@ use crate::parameters::Input;
 /// to load only needed fonts. In practise this won't be that big of a deal, because
 /// all fonts are lazily loaded into memory, but they stay there, so **manually empty**
 /// the [FontCache].
+///
+/// ### Filename restrictions
+/// Do not use any filenames or paths that contain text
+/// **`"CUSTOM_SOURCE_CONTENT_INPUT_IN_MEMORY_FILE"`**. \
+/// For more information check the main ReadMe file.
 ///
 /// **⚠ You have been warned ⚠**
 ///
@@ -116,6 +121,8 @@ pub struct CompilerBuilder {
     sys_inputs: Vec<(String, String)>,
     /// Overrides typst standard library with custom symbol definitions.
     custom_data: Vec<(String, Value)>,
+    /// Generate PDF/A output. Only used if compiler compiles to PDF.
+    pdf_a: Option<bool>,
 
     /// If needed, additional font paths, will be inserted into [FontCache].
     font_paths: Vec<PathBuf>,
@@ -139,12 +146,18 @@ impl CompilerBuilder {
     ///     .build()
     ///     .expect("Couldn't build the compiler");
     /// ```
+    ///
+    /// # Note / Warning
+    /// Do not use any filenames or paths that contain text
+    /// **`"CUSTOM_SOURCE_CONTENT_INPUT_IN_MEMORY_FILE"`**. \
+    /// For more information check the main ReadMe file.
     pub fn with_input(input: Input) -> Self {
         Self {
             input,
 
             sys_inputs: Vec::new(),
             custom_data: Vec::new(),
+            pdf_a: Some(false),
 
             font_paths: Vec::new(),
             ppi: None,
@@ -164,6 +177,11 @@ impl CompilerBuilder {
     ///     .build()
     ///     .expect("Couldn't build the compiler");
     /// ```
+    ///
+    /// # Note / Warning
+    /// Do not use any filenames or paths that contain text
+    /// **`"CUSTOM_SOURCE_CONTENT_INPUT_IN_MEMORY_FILE"`**. \
+    /// For more information check the main ReadMe file.
     pub fn with_file_input(entry: impl ToString, root: impl Into<PathBuf>) -> Self {
         let input = Input::File { entry: entry.to_string(), root: root.into() };
         return Self::with_input(input);
@@ -537,6 +555,18 @@ impl CompilerBuilder {
         self
     }
 
+    /// ## PDF/A output
+    /// Default value: false
+    ///
+    /// Enables creation of PDF/A files.
+    ///
+    /// # Note
+    /// Ignored if not compiling to PDF.
+    pub fn with_pdf_a(mut self, pdf_a: bool) -> Self {
+        self.pdf_a = Some(pdf_a);
+        self
+    }
+
     /// Optional [ureq::Agent]
     ///
     /// Used for downloading packages from the repository. Primarily exists to enable loading
@@ -583,8 +613,19 @@ impl CompilerBuilder {
     /// all fonts are lazily loaded into memory, but they stay there, so **manually empty**
     /// the [FontCache].
     ///
+    /// ### Filename restrictions
+    /// Do not use any filenames or paths that contain text
+    /// **`"CUSTOM_SOURCE_CONTENT_INPUT_IN_MEMORY_FILE"`**. \
+    /// For more information check the main ReadMe file.
+    ///
     /// **⚠ You have been warned ⚠**
     pub fn build(self) -> WrapperResult<Compiler> {
+
+        // Prevents forbidden filename/path input.
+        if self.input.is_forbidden() {
+            return Err(WrapperError::ForbiddenFilenamePathText);
+        }
+
         let http_client = create_http_agent(self.agent);
 
         let now = chrono::Utc::now();
@@ -602,17 +643,20 @@ impl CompilerBuilder {
 
         // Provides a way to load custom data into the library, by overriding `keys`.
         for (key, value) in self.custom_data.into_iter() {
+
+            let key_eco = ecow::EcoString::from(key);
             library
                 .global
                 .scope_mut()
-                .define_captured(key, value, Capturer::Function);
+                .define_captured(key_eco, value, Capturer::Function, Span::detached());
         }
 
         let root_path: PathBuf;
         let entry: Source = match self.input {
             Input::Content(c) => {
                 root_path = PathBuf::from(".");
-                Source::detached(c)
+                let vpath = VirtualPath::new(crate::RESERVED_IN_MEMORY_IDENTIFIER);
+                Source::new(FileId::new(None, vpath), c)
             }
             Input::File { entry, root } => {
                 // Appends `entry` filename to `root`
@@ -664,9 +708,10 @@ impl CompilerBuilder {
             root: root_path,
             entry,
             files: Mutex::new(files),
+            pdf_a: self.pdf_a.unwrap_or(false),
 
-            library: Prehashed::new(library),
-            book: Prehashed::new(book),
+            library: LazyHash::new(library),
+            book: LazyHash::new(book),
             fonts,
 
             http_client,

@@ -12,6 +12,10 @@ pub type WrapperResult<T> = Result<T, WrapperError>;
 #[error("{0}")]
 pub enum WrapperError {
 
+    /// Forbidden filename/path
+    #[error("Used filename/path with forbidden text/contents. Please check ReadMe for more info.")]
+    ForbiddenFilenamePathText,
+
     /// Shouldn't happen, but just in case. \
     /// Uninitialized access to [FontCache](crate::fonts::FontCache).
     #[error("Accessing uninitialized font storage")]
