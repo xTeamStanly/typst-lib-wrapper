@@ -202,9 +202,4 @@ There are more specific examples alongside every functions.
 -   📥 **Automatic package downloads**: This library will automatically download packages from the
     Typst package registry. This is also done by the [official CLI][typst-cli].
 
-# Todo
-
-- HTML export support
-
-
 [typst-cli]: https://github.com/typst/typst/tree/main/crates/typst-cli
