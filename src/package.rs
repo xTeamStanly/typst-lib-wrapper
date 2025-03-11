@@ -3,7 +3,9 @@
 //!
 //! ### Used internally.
 
+use std::io::Read;
 use std::path::{Path, PathBuf};
+
 use typst::diag::{eco_format, PackageError, PackageResult};
 use typst_syntax::package::PackageSpec;
 
@@ -22,12 +24,12 @@ pub(crate) fn create_http_agent(
         return http_agent;
     } else {
         // Creates new agent.
-        let mut builder = ureq::AgentBuilder::new();
+        let mut builder = ureq::Agent::config_builder();
 
         // Set user agent.
         builder = builder.user_agent(USER_AGENT);
 
-        return builder.build();
+        return builder.build().new_agent();
     }
 }
 
@@ -79,9 +81,9 @@ fn download_package(
 
     // Build url and send request.
     let url = format!("{HOST}/preview/{}-{}.tar.gz", spec.name, spec.version);
-    let response: ureq::Response = match http_client.get(&url).call() {
+    let response = match http_client.get(&url).call() {
         Ok(resp) => resp,
-        Err(ureq::Error::Status(404, _)) =>
+        Err(ureq::Error::StatusCode(404)) =>
             return Err(PackageError::NotFound(spec.clone())),
         Err(err) => {
             let message = eco_format!("{err}");
@@ -91,14 +93,21 @@ fn download_package(
 
     // Try to get buffer size from `Content-Length` header.
     // If not present/error use zero. `Vec::with_capacity` can handle zero.
-    let content_length: usize = match response.header("Content-Length") {
+    let content_length: usize = match response.headers().get("Content-Length") {
         None => 0,
-        Some(header) => header.parse::<usize>().unwrap_or(0)
+        Some(header) => {
+            match header.to_str() {
+                Ok(header_str) => {
+                    header_str.parse::<usize>().unwrap_or(0)
+                },
+                Err(_) => 0
+            }
+        }
     };
     let mut buffer: Vec<u8> = Vec::with_capacity(content_length);
 
     // Try to read HTTP response to buffer and decompress it.
-    response.into_reader().read_to_end(&mut buffer)
+    response.into_body().as_reader().read_to_end(&mut buffer)
         .map_err(|err| PackageError::NetworkFailed(Some(eco_format!("{err}"))))?;
 
     let decompressed = flate2::read::GzDecoder::new(buffer.as_slice());

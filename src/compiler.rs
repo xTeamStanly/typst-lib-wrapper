@@ -6,9 +6,10 @@ use std::path::PathBuf;
 use parking_lot::Mutex;
 use ecow::EcoVec;
 use typst::diag::{FileResult, SourceDiagnostic, Warned};
-use typst_pdf::{PdfOptions, PdfStandard, PdfStandards};
+use typst_pdf::{PdfOptions, PdfStandard, PdfStandards, Timestamp};
 use typst::foundations::{Bytes, Datetime, Smart};
-use typst::model::Document;
+use typst::layout::PagedDocument;
+use typst::html::HtmlDocument;
 use typst::text::{Font, FontBook};
 use typst::{Library, World};
 use typst::visualize::{Color, Paint};
@@ -18,6 +19,8 @@ use typst_syntax::{FileId, Source, Span};
 use crate::files::LazyFile;
 use crate::fonts::{LazyFont, FontCache};
 use crate::parameters::CompilerOutput;
+
+
 
 /// [Compiler] instance build from [CompilerBuilder](crate::builder::CompilerBuilder).
 ///
@@ -171,7 +174,7 @@ impl Compiler {
         )
     }
 
-    /// Compiles and consumes `self` into a typst document.
+    /// Compiles and consumes `self` into a paged typst document.
     ///
     /// Function returns a tuple with optional Document and [SourceDiagnostic] [EcoVec].
     ///
@@ -191,7 +194,48 @@ impl Compiler {
     /// [On mixing `rayon` with `tokio`!](https://blog.dureuill.net/articles/dont-mix-rayon-tokio/)
     ///
     /// ### Used internally.
-    fn compile_document(self) -> CompilerOutput<Document> {
+    fn compile_paged_document(self) -> CompilerOutput<PagedDocument> {
+        let Warned { output, warnings } = typst::compile(&self);
+        let compilation_result = output;
+
+        // Tries to update the font cache, ignores errors.
+        let _ = FontCache::update_cache(self.fonts);
+
+        return match compilation_result {
+            Ok(doc) => CompilerOutput {
+                output: Some(doc),
+                errors: EcoVec::new(),
+                warnings
+            },
+            Err(err) => CompilerOutput {
+                output: None,
+                errors: err,
+                warnings
+            }
+        };
+    }
+
+    /// Compiles and consumes `self` into a HTML typst document.
+    ///
+    /// Function returns a tuple with optional Document and [SourceDiagnostic] [EcoVec].
+    ///
+    /// Returns Document [CompilerOutput]. \
+    /// If there's an error during compilation it will return `None` variant for `output`, also
+    /// the `errors` vector will be populated. Even if the compilation is successfull the
+    /// warnings can still occur.
+    ///
+    /// # Note / Warning
+    /// This will lock the [FontCache](crate::fonts::FontCache) Mutex and update it with lazily
+    /// loaded fonts. This mutex is **NOT ASYNC** so keep that in mind.
+    /// Please use **'blocking task'** provided by your async runtime.
+    ///
+    /// If compiling with an opt-in feature (`"parallel_compilation"`) to PNGs or SVGs,
+    /// the compiler tries to encode/convert images to bytes in parallel with `rayon`.
+    /// To sync up compiled pages, again it uses **SYNC** mutex. \
+    /// [On mixing `rayon` with `tokio`!](https://blog.dureuill.net/articles/dont-mix-rayon-tokio/)
+    ///
+    /// ### Used internally.
+    fn compile_html_document(self) -> CompilerOutput<HtmlDocument> {
         let Warned { output, warnings } = typst::compile(&self);
         let compilation_result = output;
 
@@ -244,11 +288,11 @@ impl Compiler {
         let timestamp = Self::date_convert_ymd_hms(self.now);
         let pdf_a: bool = self.pdf_a;
 
-        let compiler_output: CompilerOutput<Document> = self.compile_document();
+        let compiler_output: CompilerOutput<PagedDocument> = self.compile_paged_document();
         let mut errors = compiler_output.errors;
         let warnings = compiler_output.warnings;
 
-        let document: Document = match compiler_output.output {
+        let document: PagedDocument = match compiler_output.output {
             Some(doc) => doc,
             None => return CompilerOutput {
                 output: None,
@@ -287,7 +331,7 @@ impl Compiler {
 
         let pdf_options = PdfOptions {
             ident: Smart::Auto,
-            timestamp,
+            timestamp: timestamp.map(Timestamp::new_utc),
             standards: pdf_standards,
             page_ranges: None // `None` exports all pages.
         };
@@ -347,11 +391,11 @@ impl Compiler {
         let background = self.background;
         let page_background = Smart::Custom(Some(Paint::Solid(background)));
 
-        let compiler_output: CompilerOutput<Document> = self.compile_document();
+        let compiler_output: CompilerOutput<PagedDocument> = self.compile_paged_document();
         let errors = compiler_output.errors;
         let warnings = compiler_output.warnings;
 
-        let document: Document = match compiler_output.output {
+        let document: PagedDocument = match compiler_output.output {
             Some(doc) => doc,
             None => return CompilerOutput {
                 output: None, // 'Bubbles up' `None` variant.
@@ -492,11 +536,11 @@ impl Compiler {
         let background = self.background;
         let page_background = Smart::Custom(Some(Paint::Solid(background)));
 
-        let compiler_output: CompilerOutput<Document> = self.compile_document();
+        let compiler_output: CompilerOutput<PagedDocument> = self.compile_paged_document();
         let errors = compiler_output.errors;
         let warnings = compiler_output.warnings;
 
-        let document: Document = match compiler_output.output {
+        let document: PagedDocument = match compiler_output.output {
             Some(doc) => doc,
             None => return CompilerOutput {
                 output: None, // 'Bubbles up' `None` variant.
@@ -571,6 +615,62 @@ impl Compiler {
         return CompilerOutput {
             output,
             errors: final_errors,
+            warnings
+        };
+    }
+
+    /// Compiles typst Document into HTML bytes and consumes `self`.
+    ///
+    /// Returns [String](String) [CompilerOutput].
+    ///
+    /// # Note / Warning
+    /// This will lock the [FontCache](crate::fonts::FontCache) Mutex and update it with lazily
+    /// loaded fonts. This mutex is **NOT ASYNC** so keep that in mind.
+    /// Please use **'blocking task'** provided by your async runtime.
+    ///
+    /// # Example
+    /// Compiles Document to HTML file and saves the result.
+    /// ```
+    /// let entry = "main.typ";
+    /// let root = "./project";
+    ///
+    /// // Build the compiler and compile to HTML.
+    /// let compiler = CompilerBuilder::with_file_input(entry, root)
+    ///     .build()
+    ///     .expect("Couldn't build the compiler");
+    /// let compiled = compiler.compile_html();
+    ///
+    /// if let Some(html) = compiled.output {
+    ///     std::fs::write("./main.html", html.as_str())
+    ///         .expect("Couldn't write HTML"); // Writes HTML file.
+    /// } else {
+    ///     dbg!(compiled.errors); // Compilation failed, show errors.
+    /// }
+    /// ```
+    pub fn compile_html(self) -> CompilerOutput<String> {
+        let compiler_output: CompilerOutput<HtmlDocument> = self.compile_html_document();
+        let mut errors = compiler_output.errors;
+        let warnings = compiler_output.warnings;
+
+        let document: HtmlDocument = match compiler_output.output {
+            Some(doc) => doc,
+            None => return CompilerOutput {
+                output: None,
+                errors,
+                warnings
+            }
+        };
+
+        let mut html_string: Option<String> = None;
+
+        match typst_html::html(&document) {
+            Ok(text) => { html_string = Some(text); }
+            Err(err_vec) => { errors.extend(err_vec); }
+        };
+
+        return CompilerOutput {
+            output: html_string,
+            errors,
             warnings
         };
     }

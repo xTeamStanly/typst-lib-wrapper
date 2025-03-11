@@ -76,6 +76,26 @@ if let Some(pages) = compiled.output {
 }
 ```
 
+### HTML compilation
+```rust
+let entry = "main.typ";
+let root = "./project";
+
+// Build the compiler and compile to HTML.
+let compiler = CompilerBuilder::with_file_input(entry, root)
+    .build()
+    .expect("Couldn't build the compiler");
+let compiled = compiler.compile_html();
+
+if let Some(html) = compiled.output {
+    std::fs::write("./main.html", html.as_str())
+        .expect("Couldn't write HTML"); // Writes HTML file.
+} else {
+    dbg!(compiled.errors); // Compilation failed, show errors.
+}
+```
+
+
 ### Custom fonts
 ```rust
 // Add fonts to cache
@@ -182,7 +202,9 @@ There are more specific examples alongside every functions.
 -   📥 **Automatic package downloads**: This library will automatically download packages from the
     Typst package registry. This is also done by the [official CLI][typst-cli].
 
+# Todo
 
+- HTML export support
 
 
 [typst-cli]: https://github.com/typst/typst/tree/main/crates/typst-cli

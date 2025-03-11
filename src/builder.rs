@@ -5,10 +5,9 @@ use std::fmt::Debug;
 use std::path::PathBuf;
 
 use parking_lot::Mutex;
-use typst::foundations::{Capturer, IntoValue};
-use typst::foundations::{Dict, Value};
+use typst::foundations::{IntoValue, Dict, Value, Binding};
 use typst::visualize::Color;
-use typst::LibraryBuilder;
+use typst::{Feature, Features, LibraryBuilder};
 use typst_syntax::{FileId, Source, Span, VirtualPath};
 use typst_utils::LazyHash;
 
@@ -639,16 +638,21 @@ impl CompilerBuilder {
             .into_iter()
             .map(|(key, value)| (key.into(), value.into_value()))
             .collect();
-        let mut library = LibraryBuilder::default().with_inputs(sys_inputs).build();
+
+        let mut library = LibraryBuilder::default()
+            .with_inputs(sys_inputs)
+            .with_features(Features::from_iter([Feature::Html])) // Enable HTML feature
+            .build();
 
         // Provides a way to load custom data into the library, by overriding `keys`.
         for (key, value) in self.custom_data.into_iter() {
 
             let key_eco = ecow::EcoString::from(key);
+
             library
                 .global
                 .scope_mut()
-                .define_captured(key_eco, value, Capturer::Function, Span::detached());
+                .bind(key_eco, Binding::new(value, Span::detached()));
         }
 
         let root_path: PathBuf;

@@ -33,7 +33,7 @@ impl LazyFont {
     pub(crate) fn get(&self) -> Option<Font> {
         let font = self.font.get_or_init(|| {
             let raw_font: Vec<u8> = std::fs::read(&self.path).ok()?;
-            let bytes: Bytes = Bytes::from(raw_font);
+            let bytes: Bytes = Bytes::new(raw_font);
             Font::new(bytes, self.index)
         });
         return font.clone();
@@ -534,7 +534,7 @@ impl FontCache {
         // Optional preloaded typst embedded fonts.
         #[cfg(feature = "embed_typst_fonts")]
         for data in typst_assets::fonts() {
-            let buffer = typst::foundations::Bytes::from_static(data);
+            let buffer = typst::foundations::Bytes::new(data);
             for (i, font) in Font::iter(buffer).enumerate() {
                 book.push(font.info().clone());
                 fonts.push(LazyFont {

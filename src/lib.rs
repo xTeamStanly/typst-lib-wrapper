@@ -214,12 +214,12 @@ pub mod reexports {
     pub use typst::diag::{PackageError, FileError, SourceDiagnostic};
     pub use typst::foundations::{
         Arg, Args, Array, Bytes, Content, Datetime, Dict, Duration, Dynamic, Func, IndexMap,
-        IntoValue, Label, Module, NativeTypeData, Plugin, Str, Style, Styles, Type, Value, Version,
+        IntoValue, Label, Module, NativeTypeData, PluginFunc, Str, Style, Styles, Type, Value, Version,
         Element, NativeElement, NativeElementData, array, eco_vec
     };
 
     pub use typst::visualize::{
-        Cmyk, Color, Gradient, Hsl, Hsv, LinearRgb, Luma, Oklab, Oklch, Pattern, Rgb
+        Cmyk, Color, Gradient, Hsl, Hsv, LinearRgb, Luma, Oklab, Oklch, DashPattern, Rgb
     };
     pub use typst_syntax::Span;
 }

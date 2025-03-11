@@ -163,7 +163,7 @@ impl LazyFile {
                 Self::read_from_disk(&path)
             },
 
-            |data, _| Ok(data.into())
+            |data, _| Ok(Bytes::new(data))
         )
     }
 }
