@@ -1,8 +1,15 @@
-**Note**: This library is intended for personal use. It will not be added to `crates.io`. \
-If you wish to use this:
-```toml
-typst-lib-wrapper = { git = "https://github.com/xTeamStanly/typst-lib-wrapper.git" }
-```
+> [!WARNING]
+> Typst version 0.13.1 is currently the last supported version as I lack resources to keep up with new releases.
+> This may change in the future, but in the meantime checkout these libraries:
+> - [Relacibo/typst-as-lib](https://github.com/Relacibo/typst-as-lib)
+> - [tfachmann/typst-as-library](https://github.com/tfachmann/typst-as-library)
+
+> [!NOTE]
+> This library is intended for personal use. It will not be added to `crates.io`. \
+> If you wish to use this:
+> ```toml
+> typst-lib-wrapper = { git = "https://github.com/xTeamStanly/typst-lib-wrapper.git" }
+> ```
 
 # Overview
 Rust library that synchronously wraps Typst compiler, enabling you to compile documents and
